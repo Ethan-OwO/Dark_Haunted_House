@@ -1,12 +1,9 @@
 package com.escapencu.level;
 
-import com.escapencu.application.GameApp;
 import com.escapencu.entity.Bullet;
 import com.escapencu.entity.Enemy;
 import com.escapencu.entity.Entity;
 import com.escapencu.entity.Player;
-import com.escapencu.map.Direction;
-import com.escapencu.map.RoomNode;
 import javafx.scene.canvas.GraphicsContext;
 import javafx.scene.paint.Color;
 
@@ -14,93 +11,140 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * One room inside a dungeon floor.
- * Subclasses define the floor appearance and enemy spawning via init() and drawFloor().
+ * One room in the dungeon world.
+ * World position is derived from grid position using DungeonFloor constants.
  *
- * Door behaviour:
- *  - When room is NOT cleared: door areas are drawn as a locked wall (dark red bar).
- *  - When room IS cleared:     door areas are drawn as an open passage (floor colour gap).
- * Transition is triggered in GameScene when the player walks into a door trigger zone.
+ * Corridor indices:  0=NORTH  1=SOUTH  2=EAST  3=WEST
  */
 public abstract class Room {
-    public static final double WIDTH     = GameApp.WIDTH;
-    public static final double HEIGHT    = GameApp.HEIGHT;
-    public static final double WALL      = 24;   // wall thickness (px)
-    public static final double DOOR_SIZE = 80;   // door opening width/height (px)
-    public static final double DOOR_TRIGGER = 32; // how close to wall triggers transition
+    public enum Type { START, NORMAL, REWARD, EXIT, BOSS }
+
+    // ── World geometry ─────────────────────────────────────────────────────
+    public final double worldX, worldY, worldW, worldH;
+    public static final double WALL = 24; // visual wall thickness
+
+    // ── Grid / meta ────────────────────────────────────────────────────────
+    public final int  gridX, gridY;
+    public final Type type;
+
+    // ── State ──────────────────────────────────────────────────────────────
+    private boolean activated = false; // enemies spawned?
+    private boolean cleared;           // all enemies dead?
+
+    // Which sides connect to a corridor (used for wall gap drawing)
+    // 0=N, 1=S, 2=E, 3=W
+    private final boolean[] hasCorridor = new boolean[4];
 
     protected final List<Entity> enemies = new ArrayList<>();
-    protected RoomNode node;
 
-    /** Called by LevelManager after creating the room instance. */
-    public void setNode(RoomNode node) { this.node = node; }
+    // ── Constructor ────────────────────────────────────────────────────────
+    protected Room(int gridX, int gridY, Type type) {
+        this.gridX  = gridX;
+        this.gridY  = gridY;
+        this.type   = type;
+        this.worldX = DungeonFloor.roomWorldX(gridX);
+        this.worldY = DungeonFloor.roomWorldY(gridY);
+        this.worldW = DungeonFloor.ROOM_W;
+        this.worldH = DungeonFloor.ROOM_H;
+        // START, EXIT, REWARD have no enemies → start cleared
+        this.cleared = (type == Type.START || type == Type.EXIT || type == Type.REWARD);
+    }
 
-    /** Spawn enemies and set up room contents. Called once when first entered. */
-    public abstract void init();
+    // ── Activation (called when player first enters) ───────────────────────
+    public void activate() {
+        if (activated) return;
+        activated = true;
+        spawnEnemies();
+    }
 
-    /** Draw only the floor (background). Called before walls/enemies. */
-    protected abstract void drawFloor(GraphicsContext gc);
+    protected abstract void spawnEnemies();
 
     // ── Update ─────────────────────────────────────────────────────────────
     public void update(double deltaTime, Player player) {
+        // Drain spawn-on-death lists before removing dead entities
+        List<Entity> pending = new ArrayList<>();
+        for (Entity e : enemies)
+            if (e instanceof Enemy en) pending.addAll(en.getPendingSpawns());
+        enemies.addAll(pending);
+
         enemies.removeIf(e -> !e.isAlive());
-        for (Entity e : enemies) e.update(deltaTime);
-        // Mark cleared when all enemies gone
-        if (!node.isCleared() && enemies.stream().noneMatch(Entity::isAlive)) {
-            node.setCleared(true);
+        for (Entity e : enemies) {
+            if (e instanceof Enemy en) en.update(deltaTime, player);
+            else e.update(deltaTime);
+        }
+        if (!cleared && enemies.stream().noneMatch(Entity::isAlive)) {
+            cleared = true;
         }
     }
 
-    // ── Draw ───────────────────────────────────────────────────────────────
+    // ── Draw (world coordinates) ───────────────────────────────────────────
     public final void draw(GraphicsContext gc) {
         drawFloor(gc);
         drawWalls(gc);
         for (Entity e : enemies) e.draw(gc);
     }
 
+    /** Subclass draws the floor/background of the room. */
+    protected abstract void drawFloor(GraphicsContext gc);
+
     private void drawWalls(GraphicsContext gc) {
-        boolean cleared = node.isCleared();
-        Color wallColor   = Color.rgb(35, 35, 55);
-        Color doorOpen    = Color.rgb(70, 50, 25);   // warm brown = open passage
-        Color doorLocked  = Color.rgb(80, 20, 20);   // dark red   = locked
+        gc.setFill(Color.rgb(35, 35, 55));
+        double ct = DungeonFloor.CORRIDOR_THICK; // corridor thickness = gap width
 
         // Top wall
-        gc.setFill(wallColor);
-        gc.fillRect(0, 0, WIDTH, WALL);
-        if (node.hasDoor(Direction.NORTH)) {
-            gc.setFill(cleared ? doorOpen : doorLocked);
-            gc.fillRect(WIDTH/2 - DOOR_SIZE/2, 0, DOOR_SIZE, WALL);
+        if (!hasCorridor[0]) {
+            gc.fillRect(worldX, worldY, worldW, WALL);
+        } else {
+            double mx = worldX + worldW / 2;
+            gc.fillRect(worldX, worldY, mx - worldX - ct / 2, WALL);
+            gc.fillRect(mx + ct / 2, worldY, worldX + worldW - mx - ct / 2, WALL);
         }
-
         // Bottom wall
-        gc.setFill(wallColor);
-        gc.fillRect(0, HEIGHT - WALL, WIDTH, WALL);
-        if (node.hasDoor(Direction.SOUTH)) {
-            gc.setFill(cleared ? doorOpen : doorLocked);
-            gc.fillRect(WIDTH/2 - DOOR_SIZE/2, HEIGHT - WALL, DOOR_SIZE, WALL);
+        double by = worldY + worldH - WALL;
+        if (!hasCorridor[1]) {
+            gc.fillRect(worldX, by, worldW, WALL);
+        } else {
+            double mx = worldX + worldW / 2;
+            gc.fillRect(worldX, by, mx - worldX - ct / 2, WALL);
+            gc.fillRect(mx + ct / 2, by, worldX + worldW - mx - ct / 2, WALL);
         }
-
         // Left wall
-        gc.setFill(wallColor);
-        gc.fillRect(0, 0, WALL, HEIGHT);
-        if (node.hasDoor(Direction.WEST)) {
-            gc.setFill(cleared ? doorOpen : doorLocked);
-            gc.fillRect(0, HEIGHT/2 - DOOR_SIZE/2, WALL, DOOR_SIZE);
+        if (!hasCorridor[3]) {
+            gc.fillRect(worldX, worldY, WALL, worldH);
+        } else {
+            double my = worldY + worldH / 2;
+            gc.fillRect(worldX, worldY, WALL, my - worldY - ct / 2);
+            gc.fillRect(worldX, my + ct / 2, WALL, worldY + worldH - my - ct / 2);
         }
-
         // Right wall
-        gc.setFill(wallColor);
-        gc.fillRect(WIDTH - WALL, 0, WALL, HEIGHT);
-        if (node.hasDoor(Direction.EAST)) {
-            gc.setFill(cleared ? doorOpen : doorLocked);
-            gc.fillRect(WIDTH - WALL, HEIGHT/2 - DOOR_SIZE/2, WALL, DOOR_SIZE);
+        double rx = worldX + worldW - WALL;
+        if (!hasCorridor[2]) {
+            gc.fillRect(rx, worldY, WALL, worldH);
+        } else {
+            double my = worldY + worldH / 2;
+            gc.fillRect(rx, worldY, WALL, my - worldY - ct / 2);
+            gc.fillRect(rx, my + ct / 2, WALL, worldY + worldH - my - ct / 2);
         }
     }
 
-    // ── Helpers ────────────────────────────────────────────────────────────
-    public boolean     isCleared()        { return node.isCleared(); }
-    public List<Entity> getEnemies()      { return enemies; }
-    public RoomNode    getNode()          { return node; }
+    // ── Geometry helpers ───────────────────────────────────────────────────
+    public boolean containsPoint(double px, double py) {
+        return px >= worldX && px < worldX + worldW
+            && py >= worldY && py < worldY + worldH;
+    }
+
+    public boolean overlaps(double px, double py, double pw, double ph) {
+        return px < worldX + worldW && px + pw > worldX
+            && py < worldY + worldH && py + ph > worldY;
+    }
+
+    // ── Accessors ──────────────────────────────────────────────────────────
+    public void    setHasCorridor(int dirIndex, boolean val) { hasCorridor[dirIndex] = val; }
+    public boolean getHasCorridor(int dirIndex)             { return hasCorridor[dirIndex]; }
+    public boolean isActivated() { return activated; }
+    public boolean isCleared()   { return cleared; }
+
+    public List<Entity> getEnemies() { return enemies; }
 
     public List<Bullet> getEnemyBullets() {
         List<Bullet> all = new ArrayList<>();

@@ -1,104 +1,90 @@
 package com.escapencu.level;
 
-import com.escapencu.entity.Enemy;
-import com.escapencu.entity.Entity;
-import com.escapencu.entity.Player;
-import com.escapencu.map.RoomNode;
+import com.escapencu.entity.enemy.Goose;
+import com.escapencu.entity.enemy.Squirrel;
+import com.escapencu.entity.enemy.Termite;
 import javafx.scene.canvas.GraphicsContext;
 import javafx.scene.paint.Color;
 
 /**
- * A standard combat room or the floor exit room.
- * Enemy count and stats scale with stage and floor difficulty.
- *
- * TODO: Replace the placeholder Enemy with stage-specific enemy subclasses
- *       (Squirrel for Stage 1, Goose for Stage 2, Termite for Stage 3).
+ * Standard room used for START / NORMAL / REWARD / EXIT types.
+ * TODO: Replace placeholder Enemy with stage-specific subclasses
+ *       (Squirrel, Goose, Termite) once those are implemented.
  */
 public class NormalRoom extends Room {
-    private final int stage;      // 1, 2, 3  – affects colour theme and enemy stats
-    private final int floorNum;   // 1, 2, 3  – affects enemy count
+    private final int stage;
+    private final int floorNum;
 
-    public NormalRoom(int stage, int floorNum) {
+    public NormalRoom(int gridX, int gridY, Type type, int stage, int floorNum) {
+        super(gridX, gridY, type);
         this.stage    = stage;
         this.floorNum = floorNum;
     }
 
     @Override
-    public void init() {
-        enemies.clear();
-        // START and EXIT rooms have no enemies
-        if (node.type == RoomNode.Type.START || node.type == RoomNode.Type.EXIT) return;
-
-        int count = 2 + floorNum; // floor 1→3, floor 2→4, floor 3→5 enemies
+    protected void spawnEnemies() {
+        if (type == Type.START || type == Type.EXIT || type == Type.REWARD) return;
+        int count = 2 + floorNum; // floor1→3, floor2→4, floor3→5
         for (int i = 0; i < count; i++) {
-            double ex = WALL + 60 + (i * 230) % (int)(WIDTH  - WALL * 2 - 80);
-            double ey = WALL + 60 + (i * 170) % (int)(HEIGHT - WALL * 2 - 80);
-            enemies.add(new Enemy(ex, ey, 40, 40,
-                20 * stage,
-                60 + stage * 15 + floorNum * 10,
-                4 * stage));
+            double ex = worldX + WALL + 60 + (i * 230) % (worldW - WALL * 2 - 80);
+            double ey = worldY + WALL + 60 + (i * 170) % (worldH - WALL * 2 - 80);
+            enemies.add(switch (stage) {
+                case 1  -> new Squirrel(ex, ey, stage);
+                case 2  -> new Goose(ex, ey, stage);
+                default -> new Termite(ex, ey, stage, false);
+            });
         }
-    }
-
-    @Override
-    public void update(double deltaTime, Player player) {
-        for (Entity e : enemies) {
-            if (e instanceof Enemy enemy) {
-                enemy.moveToward(player.getCenterX(), player.getCenterY(), deltaTime);
-                enemy.shootAt(player.getCenterX(), player.getCenterY(), 180 + stage * 30);
-            }
-        }
-        super.update(deltaTime, player);
     }
 
     @Override
     protected void drawFloor(GraphicsContext gc) {
-        // Floor colour changes per stage
         gc.setFill(floorColor());
-        gc.fillRect(0, 0, WIDTH, HEIGHT);
+        gc.fillRect(worldX, worldY, worldW, worldH);
 
         // Subtle tile grid
         gc.setStroke(tileLineColor());
         gc.setLineWidth(1);
-        for (double x = WALL; x <= WIDTH - WALL; x += 64)
-            gc.strokeLine(x, WALL, x, HEIGHT - WALL);
-        for (double y = WALL; y <= HEIGHT - WALL; y += 64)
-            gc.strokeLine(WALL, y, WIDTH - WALL, y);
+        for (double x = worldX + WALL; x < worldX + worldW - WALL; x += 64)
+            gc.strokeLine(x, worldY + WALL, x, worldY + worldH - WALL);
+        for (double y = worldY + WALL; y < worldY + worldH - WALL; y += 64)
+            gc.strokeLine(worldX + WALL, y, worldX + worldW - WALL, y);
 
-        // EXIT room: draw portal
-        if (node.type == RoomNode.Type.EXIT) drawPortal(gc);
+        // EXIT room portal
+        if (type == Type.EXIT) drawPortal(gc);
+
+        // REWARD room indicator
+        if (type == Type.REWARD) drawRewardLabel(gc);
     }
 
     private void drawPortal(GraphicsContext gc) {
-        double cx = WIDTH / 2, cy = HEIGHT / 2;
-        // Outer glow ring
-        gc.setFill(Color.rgb(100, 200, 255, 0.4));
-        // JavaFX doesn't support alpha in Color.rgb(int,int,int), use Color.color():
-        gc.setFill(Color.color(0.4, 0.8, 1.0, 0.4));
+        double cx = worldX + worldW / 2, cy = worldY + worldH / 2;
+        gc.setFill(Color.color(0.4, 0.8, 1.0, 0.5));
         gc.fillOval(cx - 50, cy - 50, 100, 100);
-        // Inner circle
-        gc.setFill(Color.color(0.6, 0.9, 1.0));
-        gc.fillOval(cx - 30, cy - 30, 60, 60);
-        // Label
+        gc.setFill(Color.color(0.7, 0.95, 1.0));
+        gc.fillOval(cx - 28, cy - 28, 56, 56);
         gc.setFill(Color.WHITE);
-        gc.fillText("下一層 ▶", cx - 25, cy + 5);
+        gc.fillText("下一層 ▶", cx - 26, cy + 5);
+    }
+
+    private void drawRewardLabel(GraphicsContext gc) {
+        double cx = worldX + worldW / 2, cy = worldY + worldH / 2;
+        gc.setFill(Color.GOLD);
+        gc.fillText("★ 獎勵房間 (TODO)", cx - 55, cy);
     }
 
     private Color floorColor() {
         return switch (stage) {
-            case 1 -> Color.rgb(50, 50, 68);   // 工程五館 — blue-grey concrete
-            case 2 -> Color.rgb(40, 52, 40);   // 男13宿舍 — greenish
-            case 3 -> Color.rgb(52, 40, 40);   // 圖書館   — warm dark
-            default -> Color.rgb(50, 50, 68);
+            case 1  -> Color.rgb(50, 50, 68);  // 工程五館
+            case 2  -> Color.rgb(40, 52, 40);  // 男13宿舍
+            default -> Color.rgb(52, 40, 40);  // 圖書館
         };
     }
 
     private Color tileLineColor() {
         return switch (stage) {
-            case 1 -> Color.rgb(40, 40, 58);
-            case 2 -> Color.rgb(32, 44, 32);
-            case 3 -> Color.rgb(44, 32, 32);
-            default -> Color.rgb(40, 40, 58);
+            case 1  -> Color.rgb(40, 40, 58);
+            case 2  -> Color.rgb(32, 44, 32);
+            default -> Color.rgb(44, 32, 32);
         };
     }
 }

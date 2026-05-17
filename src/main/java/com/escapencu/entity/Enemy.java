@@ -4,6 +4,7 @@ import javafx.scene.canvas.GraphicsContext;
 import javafx.scene.paint.Color;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 /**
@@ -78,6 +79,12 @@ public class Enemy extends Entity {
         for (Bullet b : bullets) b.draw(gc);
     }
 
-    public List<Bullet> getBullets()  { return bullets; }
+    /** Player-aware update overload — subclasses override for AI logic. */
+    public void update(double deltaTime, Player player) { update(deltaTime); }
+
+    /** Returns entities to spawn this tick (e.g., Termite minions on death). */
+    public List<Entity> getPendingSpawns() { return Collections.emptyList(); }
+
+    public List<Bullet> getBullets()       { return bullets; }
     public int          getContactDamage() { return contactDamage; }
 }

@@ -1,9 +1,7 @@
 package com.escapencu.level;
 
 import com.escapencu.core.GameState;
-import com.escapencu.map.FloorMap;
 import com.escapencu.map.MapGenerator;
-import com.escapencu.map.RoomNode;
 
 /**
  * Tracks overall progression: Stage (1-3) × Floor (1-3).
@@ -14,24 +12,13 @@ public class LevelManager {
     private int stage    = 1;  // 1-3
     private int floorNum = 1;  // 1-3 within a stage
 
-    private FloorMap floorMap;
+    private DungeonFloor dungeonFloor;
 
     public LevelManager() {
         generateFloor();
     }
 
-    public FloorMap getFloorMap() { return floorMap; }
-
-    /** Build a Room instance for a given RoomNode (called lazily by GameScene). */
-    public Room createRoomForNode(RoomNode node) {
-        Room room = switch (node.type) {
-            case BOSS  -> new BossRoom(stage);
-            default    -> new NormalRoom(stage, floorNum);
-        };
-        room.setNode(node);
-        room.init();
-        return room;
-    }
+    public DungeonFloor getDungeonFloor() { return dungeonFloor; }
 
     public boolean hasNextFloor() {
         return !(stage == 3 && floorNum == 3);
@@ -49,8 +36,6 @@ public class LevelManager {
     public int getFloorNum() { return floorNum; }
 
     private void generateFloor() {
-        boolean isBossFloor = (floorNum == 3);
-        int targetRooms = 5 + (int)(Math.random() * 4); // 5-8 rooms
-        floorMap = MapGenerator.generate(System.currentTimeMillis(), targetRooms, isBossFloor);
+        dungeonFloor = MapGenerator.generate(System.currentTimeMillis(), stage, floorNum);
     }
 }

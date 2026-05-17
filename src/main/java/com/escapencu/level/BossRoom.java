@@ -1,60 +1,95 @@
 package com.escapencu.level;
 
-import com.escapencu.entity.Enemy;
 import com.escapencu.entity.Entity;
 import com.escapencu.entity.Player;
+import com.escapencu.entity.boss.Boss;
+import com.escapencu.entity.boss.ChenQinHan;
+import com.escapencu.entity.boss.Mine;
+import com.escapencu.entity.boss.ShiGuoZhen;
+import com.escapencu.entity.boss.WuXiaoGuang;
 import javafx.scene.canvas.GraphicsContext;
 import javafx.scene.paint.Color;
 
 /**
- * The boss room at the end of every 3rd floor.
- *
- * TODO: Replace the placeholder Enemy with the real Boss subclasses:
- *   stage 1 → WuXiaoGuang (無小光)
- *   stage 2 → ChenQinHan  (沉沁汗)
- *   stage 3 → ShiGuoZhen  (濕幗針)
+ * Boss room — floor 3 of every stage.
+ * Spawns the stage-specific boss and handles per-boss special ticks
+ * (Mine proximity checks for Stage 1, liquid-patch DOT for Stage 3).
  */
 public class BossRoom extends Room {
+
     private final int stage;
 
-    public BossRoom(int stage) {
+    public BossRoom(int gridX, int gridY, int stage) {
+        super(gridX, gridY, Type.BOSS);
         this.stage = stage;
     }
 
     @Override
-    public void init() {
-        enemies.clear();
-        // Placeholder: one very tough enemy representing the boss
-        enemies.add(new Enemy(WIDTH / 2 - 30, HEIGHT / 2 - 30, 60, 60,
-            250 * stage,   // HP
-            45,            // speed (slow but hits hard)
-            15 * stage));  // contact damage
+    protected void spawnEnemies() {
+        double cx = worldX + worldW / 2.0;
+        double cy = worldY + worldH / 2.0;
+        Boss boss = switch (stage) {
+            case 1  -> new WuXiaoGuang(cx, cy, stage);
+            case 2  -> new ChenQinHan(cx, cy, stage);
+            default -> new ShiGuoZhen(cx, cy, stage);
+        };
+        boss.setRoomBounds(worldX, worldY, worldW, worldH);
+        enemies.add(boss);
     }
 
     @Override
     public void update(double deltaTime, Player player) {
+        // Stage 1: Mine proximity detonation
         for (Entity e : enemies) {
-            if (e instanceof Enemy enemy) {
-                enemy.moveToward(player.getCenterX(), player.getCenterY(), deltaTime);
-                enemy.shootAt(player.getCenterX(), player.getCenterY(), 230 + stage * 40);
+            if (e instanceof Mine mine && mine.isAlive()) {
+                if (mine.checkProximity(player)) {
+                    player.takeDamage(mine.getExplosionDamage());
+                    mine.takeDamage(mine.getHp()); // kill the mine
+                }
             }
         }
+
+        // Stage 3: liquid-patch DOT
+        for (Entity e : enemies)
+            if (e instanceof ShiGuoZhen sgz) sgz.tickPatches(deltaTime, player);
+
+        // Base room logic: drain spawns, remove dead, check cleared
         super.update(deltaTime, player);
+    }
+
+    /** Convenience accessor used by GameScene HUD (optional boss HP bar). */
+    public Boss getBoss() {
+        return enemies.stream()
+            .filter(e -> e instanceof Boss && e.isAlive())
+            .map(e -> (Boss) e)
+            .findFirst().orElse(null);
     }
 
     @Override
     protected void drawFloor(GraphicsContext gc) {
-        // Ominous red-tinted boss arena
         gc.setFill(Color.rgb(40, 15, 15));
-        gc.fillRect(0, 0, WIDTH, HEIGHT);
+        gc.fillRect(worldX, worldY, worldW, worldH);
+        gc.setFill(Color.rgb(52, 22, 22));
+        gc.fillRect(worldX + WALL, worldY + WALL, worldW - WALL * 2, worldH - WALL * 2);
 
-        // Dark inner area with subtle pattern
-        gc.setFill(Color.rgb(50, 20, 20));
-        gc.fillRect(WALL, WALL, WIDTH - WALL * 2, HEIGHT - WALL * 2);
-
-        // Warning label
+        String bossName = switch (stage) {
+            case 1  -> "無小光";
+            case 2  -> "沉沁汗";
+            default -> "濕幗針";
+        };
         gc.setFill(Color.rgb(180, 30, 30));
-        gc.fillText("★ BOSS ROOM  Stage " + stage + " ★   [TODO: 換成真正的Boss]",
-                    WIDTH / 2 - 180, 50);
+        gc.fillText("★ BOSS  Stage " + stage + " — " + bossName, worldX + 30, worldY + 50);
+
+        if (isCleared()) drawPortal(gc);
+    }
+
+    private void drawPortal(GraphicsContext gc) {
+        double cx = worldX + worldW / 2, cy = worldY + worldH / 2;
+        gc.setFill(Color.color(0.4, 0.8, 1.0, 0.5));
+        gc.fillOval(cx - 50, cy - 50, 100, 100);
+        gc.setFill(Color.color(0.7, 0.95, 1.0));
+        gc.fillOval(cx - 28, cy - 28, 56, 56);
+        gc.setFill(Color.WHITE);
+        gc.fillText("下一關 ▶", cx - 26, cy + 5);
     }
 }
