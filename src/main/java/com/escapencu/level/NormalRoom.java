@@ -1,5 +1,6 @@
 package com.escapencu.level;
 
+import com.escapencu.entity.Enemy;
 import com.escapencu.entity.enemy.Goose;
 import com.escapencu.entity.enemy.Squirrel;
 import com.escapencu.entity.enemy.Termite;
@@ -28,11 +29,14 @@ public class NormalRoom extends Room {
         for (int i = 0; i < count; i++) {
             double ex = worldX + WALL + 60 + (i * 230) % (worldW - WALL * 2 - 80);
             double ey = worldY + WALL + 60 + (i * 170) % (worldH - WALL * 2 - 80);
-            enemies.add(switch (stage) {
+            Enemy e = switch (stage) {
                 case 1  -> new Squirrel(ex, ey, stage);
                 case 2  -> new Goose(ex, ey, stage);
-                default -> new Termite(ex, ey, stage, false);
-            });
+                default -> new Termite(ex, ey, stage);
+            };
+            e.setRoomBounds(worldX + WALL, worldY + WALL,
+                            worldX + worldW - WALL, worldY + worldH - WALL);
+            enemies.add(e);
         }
     }
 

@@ -28,9 +28,11 @@ import javafx.scene.input.KeyCode;
 import javafx.scene.layout.StackPane;
 import javafx.scene.paint.Color;
 
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 public class GameScene {
     private Canvas          canvas;
@@ -51,6 +53,36 @@ public class GameScene {
     private double prevMouseScreenY = -1;
     private boolean devAdvancePending = false;
 
+    // ── Camera shake ───────────────────────────────────────────────────────
+    private double shakeTimer     = 0;
+    private double shakeDuration  = 0;
+    private double shakeIntensity = 10.0;
+
+    /** Trigger a camera shake. intensity = max pixel offset. */
+    private void triggerShake(double duration, double intensity) {
+        shakeTimer    = duration;
+        shakeDuration = duration;
+        shakeIntensity = intensity;
+    }
+
+    // ── Tab-completion data (update when new commands / entities are added) ──
+    /** All available slash-commands. */
+    private static final List<String> CMD_LIST = List.of("/help", "/summon");
+
+    /**
+     * Summonable entity names — both English and Chinese so players can
+     * Tab-complete in either language.
+     * Format: English name first, then Chinese equivalent, paired by index.
+     */
+    private static final List<String> SUMMON_NAMES = List.of(
+            "squirrel",     "松鼠",
+            "goose",        "鵝",
+            "termite",      "白蟻",
+            "wuxiaoguang",  "無小光",
+            "chenqinhan",   "沉沁汗",
+            "shiguozhen",   "濕幗針"
+    );
+
     // Corridor direction offsets: index matches hasCorridor[] (0=N,1=S,2=E,3=W)
     private static final int[] DIR_DX = { 0,  0, 1, -1};
     private static final int[] DIR_DY = {-1,  1, 0,  0};
@@ -68,10 +100,11 @@ public class GameScene {
             // ── Console open: intercept input ──────────────────────────────
             if (console.isOpen()) {
                 switch (e.getCode()) {
-                    case ENTER     -> { String cmd = console.submit(); executeCommand(cmd); }
-                    case ESCAPE    -> console.close();
+                    case ENTER      -> { String cmd = console.submit(); executeCommand(cmd); }
+                    case ESCAPE     -> console.close();
                     case BACK_SPACE -> console.backspace();
-                    default -> {} // characters handled by setOnKeyTyped
+                    case TAB        -> { e.consume(); handleTabCompletion(); }
+                    default -> {} // printable characters handled by setOnKeyTyped
                 }
                 return; // don't pass keys to game while console is open
             }
@@ -218,6 +251,7 @@ public class GameScene {
         dungeon.update(deltaTime, player);
 
         if (contactCooldown > 0) contactCooldown -= deltaTime;
+        if (shakeTimer      > 0) shakeTimer      -= deltaTime;
         resolveCollisions();
         if (GameState.opMode) player.fullHeal();
         GameState.playerHp = player.getHp();
@@ -248,8 +282,17 @@ public class GameScene {
         gc.setFill(Color.rgb(10, 10, 18));
         gc.fillRect(0, 0, GameApp.WIDTH, GameApp.HEIGHT);
 
+        // Camera shake offset (fades out as shakeTimer → 0)
+        double shakeX = 0, shakeY = 0;
+        if (shakeTimer > 0) {
+            double t   = shakeTimer / shakeDuration; // 1.0 → 0.0
+            double amp = shakeIntensity * t;
+            shakeX = (Math.random() * 2 - 1) * amp;
+            shakeY = (Math.random() * 2 - 1) * amp;
+        }
+
         gc.save();
-        gc.translate(-camX(), -camY());
+        gc.translate(-camX() + shakeX, -camY() + shakeY);
         dungeon.draw(gc);
         for (Bullet b : player.getBullets()) b.draw(gc);
         player.draw(gc);
@@ -267,6 +310,72 @@ public class GameScene {
 
     private void handleShopBuy(int index) {
         if (currentRoom instanceof RewardRoom rr) rr.onShopBuy(player, index);
+    }
+
+    // ── Tab completion ─────────────────────────────────────────────────────
+
+    /**
+     * Called when Tab is pressed while the console is open.
+     *
+     * Behaviour:
+     *   • Empty buffer or partial command (no space yet) → complete the command name.
+     *   • After command + space → complete the argument for that command.
+     *   • Each Tab press cycles to the next matching option.
+     *   • Typing any character resets the cycle (handled inside CommandConsole).
+     */
+    private void handleTabCompletion() {
+        // ── Already cycling: just advance, don't re-filter from buffer ────
+        if (console.isInCompletionCycle()) {
+            console.advanceCycle();
+            return;
+        }
+
+        // ── Fresh Tab press: compute options from current buffer ───────────
+        String input = console.getBuffer();
+
+        // No slash yet → show all commands
+        if (input.isEmpty() || !input.startsWith("/")) {
+            String low = input.toLowerCase();
+            List<String> opts = CMD_LIST.stream()
+                    .filter(c -> c.startsWith(low.isEmpty() ? "/" : low))
+                    .collect(Collectors.toList());
+            console.applyTab(opts, "");
+            return;
+        }
+
+        int spaceIdx = input.indexOf(' ');
+        if (spaceIdx < 0) {
+            // Still typing the command name
+            String low = input.toLowerCase();
+            List<String> opts = CMD_LIST.stream()
+                    .filter(c -> c.startsWith(low))
+                    .collect(Collectors.toList());
+            // Exact match for a command that takes args → auto-add trailing space
+            if (opts.size() == 1 && opts.get(0).equals("/summon")
+                    && input.equalsIgnoreCase("/summon")) {
+                console.applyTab(List.of("/summon "), "");
+            } else {
+                console.applyTab(opts, "");
+            }
+        } else {
+            // Command is complete; complete the argument
+            String cmd    = input.substring(0, spaceIdx).toLowerCase();
+            String arg    = input.substring(spaceIdx + 1);    // partial arg typed so far
+            String prefix = input.substring(0, spaceIdx + 1); // "/summon "
+            List<String> opts = getArgCompletions(cmd, arg);
+            if (!opts.isEmpty()) console.applyTab(opts, prefix);
+        }
+    }
+
+    /** Returns matching argument completions for the given command and partial arg. */
+    private List<String> getArgCompletions(String cmd, String partial) {
+        String low = partial.toLowerCase();
+        return switch (cmd) {
+            case "/summon" -> SUMMON_NAMES.stream()
+                    .filter(n -> n.toLowerCase().startsWith(low))
+                    .collect(Collectors.toList());
+            default -> new ArrayList<>();
+        };
     }
 
     // ── Command console execution ──────────────────────────────────────────
@@ -303,7 +412,7 @@ public class GameScene {
         Entity entity = switch (parts[1].toLowerCase()) {
             case "squirrel", "松鼠"     -> new Squirrel(sx, sy, st);
             case "goose",    "鵝"       -> new Goose(sx, sy, st);
-            case "termite",  "白蟻"     -> new Termite(sx, sy, st, false);
+            case "termite",  "白蟻"     -> new Termite(sx, sy, st);
             case "wuxiaoguang", "無小光" -> {
                 WuXiaoGuang b = new WuXiaoGuang(sx, sy, st);
                 b.setRoomBounds(currentRoom.worldX, currentRoom.worldY,
@@ -376,6 +485,12 @@ public class GameScene {
                     int dmg = (e instanceof Enemy en) ? en.getContactDamage() : 5;
                     player.takeDamage(dmg);
                     contactCooldown = 0.5;
+
+                    // Goose charge hit: stun + camera shake
+                    if (e instanceof Goose g && g.isCharging() && !GameState.opMode) {
+                        player.applyStun(0.3);
+                        triggerShake(0.3, g.isBerserk() ? 14.0 : 9.0);
+                    }
                     break;
                 }
             }

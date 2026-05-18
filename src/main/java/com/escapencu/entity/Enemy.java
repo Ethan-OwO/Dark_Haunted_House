@@ -21,6 +21,33 @@ public class Enemy extends Entity {
 
     protected final List<Bullet> bullets = new ArrayList<>();
 
+    // ── Room bounds (set by Room when spawning) ────────────────────────────
+    protected double roomMinX = Double.NEGATIVE_INFINITY;
+    protected double roomMinY = Double.NEGATIVE_INFINITY;
+    protected double roomMaxX = Double.POSITIVE_INFINITY;
+    protected double roomMaxY = Double.POSITIVE_INFINITY;
+
+    /** Called by the room that owns this enemy so it won't walk through walls. */
+    public void setRoomBounds(double minX, double minY, double maxX, double maxY) {
+        roomMinX = minX;
+        roomMinY = minY;
+        roomMaxX = maxX;
+        roomMaxY = maxY;
+    }
+
+    /**
+     * Clamps x/y to the walkable room area.
+     * @return true if the position was actually clamped (hit a wall).
+     */
+    protected boolean clampToRoom() {
+        double cx = Math.max(roomMinX, Math.min(x, roomMaxX - width));
+        double cy = Math.max(roomMinY, Math.min(y, roomMaxY - height));
+        boolean hit = (cx != x || cy != y);
+        x = cx;
+        y = cy;
+        return hit;
+    }
+
     public Enemy(double x, double y, double width, double height,
                  int hp, double speed, int contactDamage) {
         super(x, y, width, height, hp);

@@ -36,15 +36,18 @@ public class Player extends Entity {
         if (moved) mouseIdleTime = 0;
     }
 
-    // ── Sprites (JPG with white-bg removal) ───────────────────────────────
-    private static final Image IMG_IDLE_N  = ResourceLoader.getImage("/images/player/idle_n.jpg",  true);
-    private static final Image IMG_IDLE_S  = ResourceLoader.getImage("/images/player/idle_s.jpg",  true);
-    private static final Image IMG_IDLE_E  = ResourceLoader.getImage("/images/player/idle_e.jpg",  true);
-    private static final Image IMG_WALK1_N = ResourceLoader.getImage("/images/player/walk1_n.jpg", true);
-    private static final Image IMG_WALK1_S = ResourceLoader.getImage("/images/player/walk1_s.jpg", true);
-    private static final Image IMG_WALK1_E = ResourceLoader.getImage("/images/player/walk1_e.jpg", true);
-    private static final Image IMG_DEATH1  = ResourceLoader.getImage("/images/player/death1.jpg",  true);
-    private static final Image IMG_DEATH2  = ResourceLoader.getImage("/images/player/death2.jpg",  true);
+    // ── Sprites (white background removal enabled) ────────────────────────
+    private static final Image IMG_IDLE_N  = ResourceLoader.getImage("/images/player/player_idle_n.png",  true);
+    private static final Image IMG_IDLE_S  = ResourceLoader.getImage("/images/player/player_idle_s.png",  true);
+    private static final Image IMG_IDLE_E  = ResourceLoader.getImage("/images/player/player_idle_e.png",  true);
+    private static final Image IMG_WALK1_N = ResourceLoader.getImage("/images/player/player_walk1_n.png", true);
+    private static final Image IMG_WALK1_S = ResourceLoader.getImage("/images/player/player_walk1_s.png", true);
+    private static final Image IMG_WALK1_E = ResourceLoader.getImage("/images/player/player_walk1_e.png", true);
+    private static final Image IMG_WALK2_N = ResourceLoader.getImage("/images/player/player_walk2_n.png", true);
+    private static final Image IMG_WALK2_S = ResourceLoader.getImage("/images/player/player_walk2_s.png", true);
+    private static final Image IMG_WALK2_E = ResourceLoader.getImage("/images/player/player_walk2_e.png", true);
+    private static final Image IMG_DEATH1  = ResourceLoader.getImage("/images/player/death1.jpg",         true);
+    private static final Image IMG_DEATH2  = ResourceLoader.getImage("/images/player/death2.jpg",         true);
 
     // ── Animation state ────────────────────────────────────────────────────
     private boolean moving    = false;
@@ -52,6 +55,11 @@ public class Player extends Entity {
     private double  bobOffset = 0;
     private static final double BOB_SPEED = 10.0; // rad/s
     private static final double BOB_AMP   = 2.0;  // pixels
+
+    // Walk cycle (alternates walk1 ↔ walk2 while moving)
+    private int    walkFrame    = 0;   // 0 = walk1, 1 = walk2
+    private double walkTimer    = 0;
+    private static final double WALK_FRAME_DUR = 0.15; // seconds per frame
 
     private boolean dying      = false;
     private double  deathTimer = 0;
@@ -92,9 +100,17 @@ public class Player extends Entity {
         if (moving) {
             bobTime   += deltaTime;
             bobOffset  = Math.sin(bobTime * BOB_SPEED) * BOB_AMP;
+            // Advance walk frame
+            walkTimer += deltaTime;
+            if (walkTimer >= WALK_FRAME_DUR) {
+                walkFrame = 1 - walkFrame; // toggle 0 ↔ 1
+                walkTimer = 0;
+            }
         } else {
             bobTime   = 0;
             bobOffset = 0;
+            walkFrame = 0; // reset to walk1 when stopped
+            walkTimer = 0;
         }
     }
 
@@ -175,7 +191,7 @@ public class Player extends Entity {
         shootTimer = SHOOT_COOLDOWN;
     }
 
-    private static final double DRAW_SIZE = 80; // visual size (collision box stays 32x32)
+    private static final double DRAW_SIZE = 100; // visual size (collision box stays 32x32)
 
     // ── Draw ───────────────────────────────────────────────────────────────
     @Override
@@ -212,11 +228,18 @@ public class Player extends Entity {
     private Image pickFrame() {
         if (dying) return deathTimer < DEATH_FRAME1_DURATION ? IMG_DEATH1 : IMG_DEATH2;
         Dir dir = (currentDir == Dir.W) ? Dir.E : currentDir;
-        if (moving) return switch (dir) {
-            case N -> IMG_WALK1_N;
-            case S -> IMG_WALK1_S;
-            default -> IMG_WALK1_E;
-        };
+        if (moving) {
+            if (walkFrame == 0) return switch (dir) {
+                case N -> IMG_WALK1_N;
+                case S -> IMG_WALK1_S;
+                default -> IMG_WALK1_E;
+            };
+            return switch (dir) {
+                case N -> IMG_WALK2_N;
+                case S -> IMG_WALK2_S;
+                default -> IMG_WALK2_E;
+            };
+        }
         return switch (dir) {
             case N -> IMG_IDLE_N;
             case S -> IMG_IDLE_S;

@@ -2,61 +2,83 @@ package com.escapencu.entity.enemy;
 
 import com.escapencu.entity.Enemy;
 import com.escapencu.entity.Player;
+import com.escapencu.util.ResourceLoader;
 import javafx.scene.canvas.GraphicsContext;
+import javafx.scene.image.Image;
 import javafx.scene.paint.Color;
 
-import java.util.Random;
-
 /**
- * Dropped by a Termite on death.
- * Creates a poison zone on the floor for 1-2 seconds.
- * Standing inside the circle applies poison; leaving gives ~1 s residual.
+ * Fallen wings left on the floor by a Termite.
+ *
+ * Visual  : fallen_wings.png — stays on the floor permanently (until room is left).
+ * Poison  : a green aura surrounds the wings for POISON_DURATION seconds.
+ *           Standing inside applies poison; the aura fades and vanishes after that.
+ * Combat  : contact damage = 0, cannot be shot down.
  */
 public class Wing extends Enemy {
 
-    private static final double RADIUS     = 35.0;
-    private static final Random RNG        = new Random();
+    private static final Image  IMG             = ResourceLoader.getImage("/images/enemy/termite/fallen_wings.png");
+    private static final double RADIUS          = 40.0;
+    private static final double DRAW_SIZE       = RADIUS * 2 * 1.3;
+    private static final double POISON_DURATION = 3.0; // seconds the aura is active
 
-    private double lifetime;
+    private double poisonTimer; // counts down from POISON_DURATION to 0
 
     public Wing(double cx, double cy) {
         super(cx - RADIUS, cy - RADIUS, RADIUS * 2, RADIUS * 2, 999, 0, 0);
         shootCooldown = 999;
-        lifetime      = 1.0 + RNG.nextDouble(); // 1.0 – 2.0 seconds
+        poisonTimer   = POISON_DURATION;
     }
 
-    /** Lifetime tick — called by Room's base e.update(dt) loop. */
+    // ── Update ─────────────────────────────────────────────────────────────
+
     @Override
     public void update(double deltaTime) {
-        lifetime -= deltaTime;
-        if (lifetime <= 0) alive = false;
+        if (poisonTimer > 0) poisonTimer -= deltaTime;
+        // alive stays true forever — wings remain on the floor
     }
 
-    /** Lifetime + poison check — Room calls this each frame. */
     @Override
     public void update(double deltaTime, Player player) {
-        update(deltaTime); // tick lifetime
-        if (!alive) return;
+        update(deltaTime);
+        if (poisonTimer <= 0) return;           // aura expired, no more poison
         double dist = Math.hypot(player.getCenterX() - getCenterX(),
                                  player.getCenterY() - getCenterY());
-        // Refresh poison to 1 s each tick while inside; fades naturally on exit
-        if (dist < RADIUS) player.applyPoison(1.0);
+        if (dist < RADIUS) player.applyPoison(1.0); // refresh each tick while inside
     }
 
     @Override
-    public void takeDamage(int damage) { /* wings cannot be shot down */ }
+    public void takeDamage(int damage) { /* wings cannot be destroyed */ }
+
+    // ── Draw ───────────────────────────────────────────────────────────────
 
     @Override
     public void draw(GraphicsContext gc) {
-        if (!alive) return;
-        double alpha = Math.min(0.55, lifetime * 0.4);
-        gc.setFill(Color.color(0.6, 0.2, 0.8, alpha));
-        gc.fillOval(x, y, width, height);
-        gc.setStroke(Color.color(0.8, 0.4, 1.0, alpha + 0.1));
-        gc.setLineWidth(1.5);
-        gc.strokeOval(x, y, width, height);
-        // Wing icon
-        gc.setFill(Color.color(1.0, 1.0, 1.0, alpha));
-        gc.fillText("翅", getCenterX() - 5, getCenterY() + 4);
+        double cx   = getCenterX();
+        double cy   = getCenterY();
+        double half = DRAW_SIZE / 2.0;
+
+        // ── Poison aura (only while active) ───────────────────────────────
+        if (poisonTimer > 0) {
+            // Outer aura fades out in the last 1 second
+            double auraAlpha = Math.min(1.0, poisonTimer) * 0.38;
+            gc.setFill(Color.color(0.35, 0.85, 0.25, auraAlpha));
+            gc.fillOval(cx - RADIUS, cy - RADIUS, RADIUS * 2, RADIUS * 2);
+
+            // Boundary ring
+            double ringAlpha = Math.min(1.0, poisonTimer) * 0.75;
+            gc.setStroke(Color.color(0.45, 0.95, 0.3, ringAlpha));
+            gc.setLineWidth(2.0);
+            gc.strokeOval(cx - RADIUS, cy - RADIUS, RADIUS * 2, RADIUS * 2);
+        }
+
+        // ── Wings sprite (permanent) ───────────────────────────────────────
+        if (IMG != null) {
+            gc.drawImage(IMG, cx - half, cy - half, DRAW_SIZE, DRAW_SIZE);
+        } else {
+            // Fallback
+            gc.setFill(Color.color(0.6, 0.2, 0.8, 0.5));
+            gc.fillOval(x, y, width, height);
+        }
     }
 }
