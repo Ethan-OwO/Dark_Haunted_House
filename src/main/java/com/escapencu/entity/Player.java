@@ -1,6 +1,9 @@
 package com.escapencu.entity;
 
+import com.escapencu.core.GameState;
+import com.escapencu.util.ResourceLoader;
 import javafx.scene.canvas.GraphicsContext;
+import javafx.scene.image.Image;
 import javafx.scene.input.KeyCode;
 import javafx.scene.paint.Color;
 
@@ -15,9 +18,48 @@ public class Player extends Entity {
     private static final double SHOOT_COOLDOWN = 0.28;
     private static final double SLOW_FACTOR    = 0.5;
 
-    private double shootTimer = 0;
-    private double mouseWorldX, mouseWorldY; // mouse position in world coords
+    private double shootTimer  = 0;
+    private double mouseWorldX, mouseWorldY;
     private final List<Bullet> bullets = new ArrayList<>();
+
+    // ── Direction ──────────────────────────────────────────────────────────
+    private enum Dir { N, S, E, W }
+    private Dir    currentDir  = Dir.S;
+    private double lastDx = 0, lastDy = 0;
+
+    private boolean mouseMovedThisFrame = false;
+    private double  mouseIdleTime       = 0;
+    private static final double MOUSE_LOCK_SECONDS = 0.8;
+
+    public void setMouseMoved(boolean moved) {
+        mouseMovedThisFrame = moved;
+        if (moved) mouseIdleTime = 0;
+    }
+
+    // ── Sprites (JPG with white-bg removal) ───────────────────────────────
+    private static final Image IMG_IDLE_N  = ResourceLoader.getImage("/images/player/idle_n.jpg",  true);
+    private static final Image IMG_IDLE_S  = ResourceLoader.getImage("/images/player/idle_s.jpg",  true);
+    private static final Image IMG_IDLE_E  = ResourceLoader.getImage("/images/player/idle_e.jpg",  true);
+    private static final Image IMG_WALK1_N = ResourceLoader.getImage("/images/player/walk1_n.jpg", true);
+    private static final Image IMG_WALK1_S = ResourceLoader.getImage("/images/player/walk1_s.jpg", true);
+    private static final Image IMG_WALK1_E = ResourceLoader.getImage("/images/player/walk1_e.jpg", true);
+    private static final Image IMG_DEATH1  = ResourceLoader.getImage("/images/player/death1.jpg",  true);
+    private static final Image IMG_DEATH2  = ResourceLoader.getImage("/images/player/death2.jpg",  true);
+
+    // ── Animation state ────────────────────────────────────────────────────
+    private boolean moving    = false;
+    private double  bobTime   = 0;
+    private double  bobOffset = 0;
+    private static final double BOB_SPEED = 10.0; // rad/s
+    private static final double BOB_AMP   = 2.0;  // pixels
+
+    private boolean dying      = false;
+    private double  deathTimer = 0;
+    private static final double DEATH_FRAME1_DURATION = 0.4;
+
+    // ── Temporary speed boost ──────────────────────────────────────────────
+    private double speedBoostTimer  = 0;
+    private double speedBoostFactor = 1.0;
 
     // ── Status effect timers ───────────────────────────────────────────────
     private double stunTimer       = 0;
@@ -34,12 +76,50 @@ public class Player extends Entity {
     // ── Update ─────────────────────────────────────────────────────────────
     @Override
     public void update(double deltaTime) {
-        if (stunTimer > 0) { stunTimer -= deltaTime; return; }
+        if (dying) { deathTimer += deltaTime; return; }
+
+        if (stunTimer > 0) { stunTimer -= deltaTime; moving = false; return; }
         if (slowTimer  > 0) slowTimer  -= deltaTime;
         if (shootTimer > 0) shootTimer -= deltaTime;
         applyDots(deltaTime);
         bullets.removeIf(b -> !b.isAlive());
         for (Bullet b : bullets) b.update(deltaTime);
+
+        if (!mouseMovedThisFrame) mouseIdleTime += deltaTime;
+        if (speedBoostTimer > 0) speedBoostTimer -= deltaTime;
+        updateDirection();
+
+        if (moving) {
+            bobTime   += deltaTime;
+            bobOffset  = Math.sin(bobTime * BOB_SPEED) * BOB_AMP;
+        } else {
+            bobTime   = 0;
+            bobOffset = 0;
+        }
+    }
+
+    @Override
+    public void takeDamage(int damage) {
+        super.takeDamage(damage);
+        if (!isAlive() && !dying) dying = true;
+    }
+
+    private void updateDirection() {
+        double deg;
+        if (mouseIdleTime < MOUSE_LOCK_SECONDS) {
+            // 滑鼠最近有移動：跟著滑鼠
+            deg = Math.toDegrees(
+                    Math.atan2(mouseWorldY - getCenterY(), mouseWorldX - getCenterX()));
+        } else if (moving) {
+            // 滑鼠靜止超過閾值且有移動：跟著 WASD
+            deg = Math.toDegrees(Math.atan2(lastDy, lastDx));
+        } else {
+            return; // 都沒動：維持上一個方向
+        }
+        if      (deg >= -45  && deg <  45)  currentDir = Dir.E;
+        else if (deg >=  45  && deg < 135)  currentDir = Dir.S;
+        else if (deg >= -135 && deg < -45)  currentDir = Dir.N;
+        else                                currentDir = Dir.W;
     }
 
     private void applyDots(double dt) {
@@ -55,16 +135,22 @@ public class Player extends Entity {
         }
     }
 
-    // ── Movement (collision delegated to AreaChecker) ─────────────────────
+    // ── Movement ───────────────────────────────────────────────────────────
     public void handleMovement(Set<KeyCode> keys, double dt, AreaChecker area) {
-        if (stunTimer > 0) return;
-        double speed = (slowTimer > 0) ? SPEED * SLOW_FACTOR : SPEED;
+        if (stunTimer > 0) { moving = false; return; }
+        double speed = SPEED;
+        if (GameState.opMode)        speed *= 3.0;
+        else if (slowTimer      > 0) speed *= SLOW_FACTOR;
+        else if (speedBoostTimer > 0) speed *= speedBoostFactor;
         double dx = 0, dy = 0;
         if (keys.contains(KeyCode.W) || keys.contains(KeyCode.UP))    dy -= 1;
         if (keys.contains(KeyCode.S) || keys.contains(KeyCode.DOWN))  dy += 1;
         if (keys.contains(KeyCode.A) || keys.contains(KeyCode.LEFT))  dx -= 1;
         if (keys.contains(KeyCode.D) || keys.contains(KeyCode.RIGHT)) dx += 1;
         if (dx != 0 && dy != 0) { dx *= 0.7071; dy *= 0.7071; }
+
+        moving = (dx != 0 || dy != 0);
+        if (moving) { lastDx = dx; lastDy = dy; }
 
         double newX = x + dx * speed * dt;
         double newY = y + dy * speed * dt;
@@ -73,7 +159,6 @@ public class Player extends Entity {
     }
 
     // ── Shooting ───────────────────────────────────────────────────────────
-    /** Call with the mouse position already converted to world coordinates. */
     public void updateMouseWorldPos(double wx, double wy) {
         mouseWorldX = wx;
         mouseWorldY = wy;
@@ -82,33 +167,64 @@ public class Player extends Entity {
     public void shoot() {
         if (shootTimer > 0 || stunTimer > 0) return;
         double angle = Math.atan2(mouseWorldY - getCenterY(), mouseWorldX - getCenterX());
+        int dmg = (int)(BULLET_DAMAGE * GameState.damageMultiplier);
         bullets.add(new Bullet(getCenterX(), getCenterY(),
                 Math.cos(angle) * BULLET_SPEED,
                 Math.sin(angle) * BULLET_SPEED,
-                BULLET_DAMAGE, true));
+                dmg, true));
         shootTimer = SHOOT_COOLDOWN;
     }
 
-    // ── Draw (in world coordinates) ────────────────────────────────────────
+    private static final double DRAW_SIZE = 80; // visual size (collision box stays 32x32)
+
+    // ── Draw ───────────────────────────────────────────────────────────────
     @Override
     public void draw(GraphicsContext gc) {
-        gc.setFill(stunTimer > 0 ? Color.YELLOW : Color.CYAN);
-        gc.fillRect(x, y, width, height);
+        Image   frame   = pickFrame();
+        boolean flip    = (currentDir == Dir.W) && !dying;
+        double  drawX   = getCenterX() - DRAW_SIZE / 2.0;
+        double  drawY   = getCenterY() - DRAW_SIZE / 2.0 + bobOffset;
 
-        // Aim indicator dot
-        double angle = Math.atan2(mouseWorldY - getCenterY(), mouseWorldX - getCenterX());
-        gc.setFill(Color.DARKBLUE);
-        gc.fillOval(getCenterX() + Math.cos(angle) * 14 - 4,
-                    getCenterY() + Math.sin(angle) * 14 - 4, 8, 8);
+        if (stunTimer > 0) gc.setGlobalAlpha(0.55);
 
-        // Status labels
+        if (frame != null) {
+            if (flip) {
+                gc.save();
+                gc.translate(getCenterX(), 0);
+                gc.scale(-1, 1);
+                gc.drawImage(frame, -DRAW_SIZE / 2.0, drawY, DRAW_SIZE, DRAW_SIZE);
+                gc.restore();
+            } else {
+                gc.drawImage(frame, drawX, drawY, DRAW_SIZE, DRAW_SIZE);
+            }
+        } else {
+            gc.setFill(stunTimer > 0 ? Color.YELLOW : Color.CYAN);
+            gc.fillRect(x, y, width, height);
+        }
+
+        gc.setGlobalAlpha(1.0);
+
         if (poisonTimer > 0) { gc.setFill(Color.LIMEGREEN); gc.fillText("毒", x,      y - 5); }
         if (burnTimer   > 0) { gc.setFill(Color.ORANGE);    gc.fillText("燃", x + 16, y - 5); }
         if (slowTimer   > 0) { gc.setFill(Color.LIGHTBLUE); gc.fillText("緩", x + 32, y - 5); }
     }
 
+    private Image pickFrame() {
+        if (dying) return deathTimer < DEATH_FRAME1_DURATION ? IMG_DEATH1 : IMG_DEATH2;
+        Dir dir = (currentDir == Dir.W) ? Dir.E : currentDir;
+        if (moving) return switch (dir) {
+            case N -> IMG_WALK1_N;
+            case S -> IMG_WALK1_S;
+            default -> IMG_WALK1_E;
+        };
+        return switch (dir) {
+            case N -> IMG_IDLE_N;
+            case S -> IMG_IDLE_S;
+            default -> IMG_IDLE_E;
+        };
+    }
+
     // ── OP mode helper ─────────────────────────────────────────────────────
-    /** Restores full HP and clears all status effects. Called every frame in OP mode. */
     public void fullHeal() {
         hp              = maxHp;
         stunTimer       = 0;
@@ -120,6 +236,12 @@ public class Player extends Entity {
     }
 
     // ── Status appliers ────────────────────────────────────────────────────
+    public void heal(int amount)   { hp = Math.min(hp + amount, maxHp); }
+    public void applySpeedBoost(double factor, double duration) {
+        speedBoostTimer  = duration;
+        speedBoostFactor = factor;
+    }
+
     public void applySlow(double factor, double duration) { applySlow(duration); }
     public void applyStun  (double d) { stunTimer   = Math.max(stunTimer,   d); }
     public void applySlow  (double d) { slowTimer   = Math.max(slowTimer,   d); }

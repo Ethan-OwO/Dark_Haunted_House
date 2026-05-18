@@ -10,8 +10,15 @@ import com.escapencu.entity.EffectBullet;
 import com.escapencu.entity.Enemy;
 import com.escapencu.entity.Entity;
 import com.escapencu.entity.Player;
+import com.escapencu.entity.boss.ChenQinHan;
+import com.escapencu.entity.boss.ShiGuoZhen;
+import com.escapencu.entity.boss.WuXiaoGuang;
+import com.escapencu.entity.enemy.Goose;
+import com.escapencu.entity.enemy.Squirrel;
+import com.escapencu.entity.enemy.Termite;
 import com.escapencu.level.DungeonFloor;
 import com.escapencu.level.LevelManager;
+import com.escapencu.level.RewardRoom;
 import com.escapencu.level.Room;
 import com.escapencu.util.CollisionUtil;
 import javafx.scene.Scene;
@@ -34,11 +41,14 @@ public class GameScene {
     private Room            currentRoom;
     private GameLoop        gameLoop;
 
+    private final CommandConsole console = new CommandConsole();
     private final Set<KeyCode> pressedKeys    = new HashSet<>();
     private final Set<Room>    visitedRooms   = new HashSet<>();
     private double contactCooldown  = 0;
     private double mouseScreenX     = 0;
     private double mouseScreenY     = 0;
+    private double prevMouseScreenX = -1;
+    private double prevMouseScreenY = -1;
     private boolean devAdvancePending = false;
 
     // Corridor direction offsets: index matches hasCorridor[] (0=N,1=S,2=E,3=W)
@@ -55,10 +65,22 @@ public class GameScene {
 
         canvas.setFocusTraversable(true);
         canvas.setOnKeyPressed(e -> {
+            // ── Console open: intercept input ──────────────────────────────
+            if (console.isOpen()) {
+                switch (e.getCode()) {
+                    case ENTER     -> { String cmd = console.submit(); executeCommand(cmd); }
+                    case ESCAPE    -> console.close();
+                    case BACK_SPACE -> console.backspace();
+                    default -> {} // characters handled by setOnKeyTyped
+                }
+                return; // don't pass keys to game while console is open
+            }
+
+            // ── Normal game input ──────────────────────────────────────────
             pressedKeys.add(e.getCode());
             if (e.getCode() == KeyCode.F1) {
                 GameState.devMode = !GameState.devMode;
-                if (!GameState.devMode) GameState.opMode = false; // turning dev off kills OP too
+                if (!GameState.devMode) GameState.opMode = false;
             }
             if (e.getCode() == KeyCode.F2 && GameState.devMode) {
                 GameState.opMode = !GameState.opMode;
@@ -66,10 +88,18 @@ public class GameScene {
             if (e.getCode() == KeyCode.N && GameState.devMode) {
                 devAdvancePending = true;
             }
+            if (e.getCode() == KeyCode.ENTER && GameState.devMode) {
+                console.open();
+            }
+            if (e.getCode() == KeyCode.E)      { handleRewardInteract(); }
+            if (e.getCode() == KeyCode.DIGIT1) { handleShopBuy(0); }
+            if (e.getCode() == KeyCode.DIGIT2) { handleShopBuy(1); }
+            if (e.getCode() == KeyCode.DIGIT3) { handleShopBuy(2); }
         });
+        canvas.setOnKeyTyped(e -> console.typeChar(e.getCharacter()));
         canvas.setOnKeyReleased(e  -> pressedKeys.remove(e.getCode()));
         canvas.setOnMouseMoved(e   -> { mouseScreenX = e.getX(); mouseScreenY = e.getY(); });
-        canvas.setOnMouseClicked(e -> player.shoot());
+        canvas.setOnMouseClicked(e -> { if (!console.isOpen()) player.shoot(); });
 
         gameLoop = new GameLoop(this);
         gameLoop.start();
@@ -133,6 +163,9 @@ public class GameScene {
 
     // ── Update (called by GameLoop) ────────────────────────────────────────
     public void update(double deltaTime) {
+        console.update(deltaTime);
+        if (console.isOpen()) return; // 打指令時凍結遊戲
+
         // Dev mode: N key → skip to next floor
         if (devAdvancePending) {
             devAdvancePending = false;
@@ -141,6 +174,11 @@ public class GameScene {
         }
 
         // Aim: convert mouse screen position → world position
+        double mouseDelta = Math.hypot(mouseScreenX - prevMouseScreenX, mouseScreenY - prevMouseScreenY);
+        boolean mouseMoved = mouseDelta > 3.0;
+        prevMouseScreenX = mouseScreenX;
+        prevMouseScreenY = mouseScreenY;
+        player.setMouseMoved(mouseMoved);
         player.updateMouseWorldPos(mouseScreenX + camX(), mouseScreenY + camY());
 
         // Move player
@@ -219,6 +257,80 @@ public class GameScene {
 
         drawHUD();
         drawMiniMap();
+        console.draw(gc, GameApp.WIDTH, GameApp.HEIGHT);
+    }
+
+    // ── Reward room interaction ────────────────────────────────────────────
+    private void handleRewardInteract() {
+        if (currentRoom instanceof RewardRoom rr) rr.onInteract(player);
+    }
+
+    private void handleShopBuy(int index) {
+        if (currentRoom instanceof RewardRoom rr) rr.onShopBuy(player, index);
+    }
+
+    // ── Command console execution ──────────────────────────────────────────
+    private void executeCommand(String cmd) {
+        if (cmd == null || cmd.isBlank()) return;
+        if (!cmd.startsWith("/")) { console.showOutput("❌ 指令必須以 / 開頭"); return; }
+
+        String[] parts = cmd.substring(1).trim().split("\\s+");
+        switch (parts[0].toLowerCase()) {
+            case "help"   -> execHelp();
+            case "summon" -> execSummon(parts);
+            default       -> console.showOutput("❌ 未知指令：/" + parts[0] + "\n輸入 /help 查看所有指令");
+        }
+    }
+
+    private void execHelp() {
+        console.showOutput("""
+                ── 指令清單 ──────────────────────
+                /help              顯示此清單
+                /summon <名稱>     在玩家旁召喚實體
+                  可召喚：squirrel 松鼠、goose 鵝、termite 白蟻
+                          wuxiaoguang 無小光、chenqinhan 沉沁汗
+                          shiguozhen 濕幗針""", 6.0);
+    }
+
+    private void execSummon(String[] parts) {
+        if (parts.length < 2) { console.showOutput("用法：/summon <名稱>"); return; }
+        if (currentRoom == null) { console.showOutput("❌ 目前沒有房間"); return; }
+
+        double sx = player.getCenterX() + 70;
+        double sy = player.getCenterY();
+        int    st = levelManager.getStage();
+
+        Entity entity = switch (parts[1].toLowerCase()) {
+            case "squirrel", "松鼠"     -> new Squirrel(sx, sy, st);
+            case "goose",    "鵝"       -> new Goose(sx, sy, st);
+            case "termite",  "白蟻"     -> new Termite(sx, sy, st, false);
+            case "wuxiaoguang", "無小光" -> {
+                WuXiaoGuang b = new WuXiaoGuang(sx, sy, st);
+                b.setRoomBounds(currentRoom.worldX, currentRoom.worldY,
+                                currentRoom.worldW, currentRoom.worldH);
+                yield b;
+            }
+            case "chenqinhan", "沉沁汗" -> {
+                ChenQinHan b = new ChenQinHan(sx, sy, st);
+                b.setRoomBounds(currentRoom.worldX, currentRoom.worldY,
+                                currentRoom.worldW, currentRoom.worldH);
+                yield b;
+            }
+            case "shiguozhen", "濕幗針" -> {
+                ShiGuoZhen b = new ShiGuoZhen(sx, sy, st);
+                b.setRoomBounds(currentRoom.worldX, currentRoom.worldY,
+                                currentRoom.worldW, currentRoom.worldH);
+                yield b;
+            }
+            default -> null;
+        };
+
+        if (entity == null) {
+            console.showOutput("❌ 未知實體：" + parts[1] + "\n輸入 /help 查看可召喚清單");
+            return;
+        }
+        currentRoom.getEnemies().add(entity);
+        console.showOutput("✔ 已召喚：" + parts[1]);
     }
 
     // ── Floor advancement ──────────────────────────────────────────────────
