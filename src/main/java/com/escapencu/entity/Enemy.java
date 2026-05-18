@@ -21,6 +21,29 @@ public class Enemy extends Entity {
 
     protected final List<Bullet> bullets = new ArrayList<>();
 
+    // ── Status effect timers (applied by book effects) ─────────────────────
+    private static final double ENEMY_SLOW_FACTOR  = 0.45;
+    private static final double ENEMY_BURN_TICK    = 0.4;   // seconds between burn ticks
+    private static final int    ENEMY_BURN_DAMAGE  = 3;
+
+    private double enemySlowTimer  = 0;
+    private double enemyBurnTimer  = 0;
+    private double enemyBurnTick   = 0;
+
+    /** Slow the enemy's movement for the given duration (stacks by taking the max). */
+    public void applySlow(double duration) {
+        enemySlowTimer = Math.max(enemySlowTimer, duration);
+    }
+
+    /** Set the enemy on fire for the given duration (stacks by taking the max). */
+    public void applyBurn(double duration) {
+        enemyBurnTimer = Math.max(enemyBurnTimer, duration);
+        if (enemyBurnTimer > 0 && enemyBurnTick <= 0) enemyBurnTick = ENEMY_BURN_TICK;
+    }
+
+    public boolean isEnemySlowed()  { return enemySlowTimer > 0; }
+    public boolean isEnemyBurning() { return enemyBurnTimer > 0; }
+
     // ── Room bounds (set by Room when spawning) ────────────────────────────
     protected double roomMinX = Double.NEGATIVE_INFINITY;
     protected double roomMinY = Double.NEGATIVE_INFINITY;
@@ -62,18 +85,30 @@ public class Enemy extends Entity {
         if (shootTimer > 0) shootTimer -= deltaTime;
         bullets.removeIf(b -> !b.isAlive());
         for (Bullet b : bullets) b.update(deltaTime);
+
+        // ── Status effect ticks ────────────────────────────────────────────
+        if (enemySlowTimer > 0) enemySlowTimer -= deltaTime;
+        if (enemyBurnTimer > 0) {
+            enemyBurnTimer -= deltaTime;
+            enemyBurnTick  -= deltaTime;
+            if (enemyBurnTick <= 0) {
+                takeDamage(ENEMY_BURN_DAMAGE);
+                enemyBurnTick = ENEMY_BURN_TICK;
+            }
+        }
     }
 
     // ── AI helpers (call from subclass or TestRoom) ───────────────────────
 
-    /** Move toward a world position. */
+    /** Move toward a world position (respects slow effect). */
     public void moveToward(double tx, double ty, double deltaTime) {
         double dx   = tx - getCenterX();
         double dy   = ty - getCenterY();
         double dist = Math.hypot(dx, dy);
         if (dist < 1) return;
-        x += (dx / dist) * speed * deltaTime;
-        y += (dy / dist) * speed * deltaTime;
+        double effectiveSpeed = speed * (enemySlowTimer > 0 ? ENEMY_SLOW_FACTOR : 1.0);
+        x += (dx / dist) * effectiveSpeed * deltaTime;
+        y += (dy / dist) * effectiveSpeed * deltaTime;
     }
 
     /** Fire a bullet toward a world position (respects cooldown). */
@@ -103,7 +138,26 @@ public class Enemy extends Entity {
             gc.fillRect(x, y - 8, width * (double) hp / maxHp, 5);
         }
 
+        drawStatusEffects(gc);
         for (Bullet b : bullets) b.draw(gc);
+    }
+
+    /**
+     * Draw small status-effect badges above the enemy.
+     * Call this at the end of any subclass draw() that wants to show these.
+     */
+    protected void drawStatusEffects(GraphicsContext gc) {
+        double bx = x;
+        double by = y - 18;   // sit just above the HP bar row
+        if (enemyBurnTimer > 0) {
+            gc.setFill(Color.ORANGE);
+            gc.fillText("🔥", bx, by);
+            bx += 18;
+        }
+        if (enemySlowTimer > 0) {
+            gc.setFill(Color.LIGHTBLUE);
+            gc.fillText("❄", bx, by);
+        }
     }
 
     /** Player-aware update overload — subclasses override for AI logic. */

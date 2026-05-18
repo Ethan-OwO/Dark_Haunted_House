@@ -72,7 +72,9 @@ public abstract class Room {
             if (e instanceof Enemy en) en.update(deltaTime, player);
             else e.update(deltaTime);
         }
-        if (!cleared && enemies.stream().noneMatch(Entity::isAlive)) {
+        // Cleared when no alive entity that counts toward room-clear remains
+        // (permanent floor objects like Wing are excluded via countsForRoomClear())
+        if (!cleared && enemies.stream().noneMatch(e -> e.isAlive() && e.countsForRoomClear())) {
             cleared = true;
         }
     }

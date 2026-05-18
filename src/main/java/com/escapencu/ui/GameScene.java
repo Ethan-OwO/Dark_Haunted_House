@@ -466,6 +466,13 @@ public class GameScene {
                     e.takeDamage(GameState.opMode ? 9999 : b.getDamage());
                     b.hit();
                     GameState.score += 10;
+                    // ── Apply book effects on hit ──────────────────────────
+                    if (e instanceof Enemy en) {
+                        if (GameState.bookEffects.contains(GameState.BookEffect.SLOW_SHOT))
+                            en.applySlow(2.0);
+                        if (GameState.bookEffects.contains(GameState.BookEffect.BURN_SHOT))
+                            en.applyBurn(2.0);
+                    }
                     break;
                 }
             }
@@ -501,6 +508,7 @@ public class GameScene {
     private void drawHUD() {
         double barW = 200, barH = 20;
 
+        // HP bar
         gc.setFill(Color.DARKRED);
         gc.fillRect(10, 10, barW, barH);
         gc.setFill(Color.LIMEGREEN);
@@ -510,6 +518,7 @@ public class GameScene {
         gc.setFill(Color.WHITE);
         gc.fillText("HP: " + GameState.playerHp + " / " + GameState.playerMaxHp, 15, 25);
 
+        // Stage / Floor label
         String floorLabel = levelManager.getFloorNum() == 3
                 ? "Boss Floor" : "Floor " + levelManager.getFloorNum();
         gc.setFill(Color.WHITE);
@@ -517,6 +526,7 @@ public class GameScene {
                     GameApp.WIDTH / 2.0 - 60, 25);
         gc.fillText("分數: " + GameState.score, GameApp.WIDTH - 120.0, 25);
 
+        // Dev / OP tags
         if (GameState.devMode) {
             gc.setFill(Color.YELLOW);
             gc.fillText("[ DEV  F1=off  N=skip  F2=OP ]", 10, 50);
@@ -524,6 +534,35 @@ public class GameScene {
         if (GameState.opMode) {
             gc.setFill(Color.rgb(255, 80, 255));
             gc.fillText("[ OP  ∞HP  9999DMG  免疫 ]", 10, 68);
+        }
+
+        // ── Book effects panel ─────────────────────────────────────────────
+        if (!GameState.bookEffects.isEmpty()) {
+            double bx = 10, by = GameApp.HEIGHT - 14;
+
+            // Row for each active effect (drawn bottom-to-top)
+            for (GameState.BookEffect fx : GameState.bookEffects) {
+                switch (fx) {
+                    case EXAM_QUESTIONS -> {
+                        gc.setFill(Color.color(1.0, 0.92, 0.2, 0.9));
+                        gc.fillText("📖 明年考古題  ATK ×" +
+                                String.format("%.1f", GameState.damageMultiplier), bx, by);
+                    }
+                    case SLOW_SHOT -> {
+                        gc.setFill(Color.color(0.4, 0.85, 1.0, 0.9));
+                        gc.fillText("📖 緩速射擊  命中使敵人緩速", bx, by);
+                    }
+                    case BURN_SHOT -> {
+                        gc.setFill(Color.color(1.0, 0.55, 0.1, 0.9));
+                        gc.fillText("📖 燃燒射擊  命中使敵人燃燒", bx, by);
+                    }
+                }
+                by -= 18;
+            }
+
+            // Small "書本強化" header above the effect rows
+            gc.setFill(Color.color(1.0, 1.0, 1.0, 0.55));
+            gc.fillText("── 書本強化 ──", bx, by);
         }
     }
 
