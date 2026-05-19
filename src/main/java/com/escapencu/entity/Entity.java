@@ -32,6 +32,12 @@ public abstract class Entity {
         }
     }
 
+    /**
+     * Whether this entity must be killed for a combat room to count as cleared.
+     * Override and return false for permanent environmental objects (e.g. Wing).
+     */
+    public boolean countsForRoomClear() { return true; }
+
     // ── Getters ────────────────────────────────────────────────────────────
     public boolean isAlive()   { return alive; }
     public double  getX()      { return x; }

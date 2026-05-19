@@ -1,6 +1,7 @@
 package com.escapencu.level;
 
 import com.escapencu.core.GameState;
+import com.escapencu.core.GameState.BookEffect;
 import com.escapencu.entity.Player;
 import javafx.scene.canvas.GraphicsContext;
 import javafx.scene.paint.Color;
@@ -84,21 +85,32 @@ public class RewardRoom extends Room {
     // ── Internal interactions ──────────────────────────────────────────────
     private void interactNPC(Player player) {
         if (npcTalked) { showDialog("好好加油，不要讓我失望。"); return; }
-        GameState.damageMultiplier = Math.max(GameState.damageMultiplier, 1.3);
+        // 書本強化：明年的考古題 — 攻擊力提升至 ×1.5
+        GameState.bookEffects.add(BookEffect.EXAM_QUESTIONS);
+        GameState.damageMultiplier = Math.max(GameState.damageMultiplier, 1.5);
         npcTalked = true;
-        showDialog("拿著，明年的考古題。\n不要說給墊積系的知道。", 4.0);
+        showDialog("拿著，明年的考古題。\n不要說給墊積系的知道。\n書本強化：攻擊力 ×1.5", 4.5);
     }
 
     private void interactChest(Player player) {
         if (collected) { showDialog("寶箱已開啟"); return; }
         collected = true;
-        switch (new Random().nextInt(3)) {
+        switch (new Random().nextInt(5)) {
             case 0 -> { player.heal(50);
                         showDialog("獲得：急救包 (+50 HP)"); }
             case 1 -> { GameState.damageMultiplier *= 1.2;
                         showDialog("獲得：傷害強化符 (傷害+20%)"); }
             case 2 -> { player.applySpeedBoost(1.15, 60.0);
                         showDialog("獲得：快跑鞋 (速度+15%，60秒)"); }
+            // ── 書本強化 ────────────────────────────────────────────────────
+            case 3 -> {
+                GameState.bookEffects.add(BookEffect.SLOW_SHOT);
+                showDialog("書本強化：緩速射擊\n子彈命中使敵人緩速 2 秒！", 3.5);
+            }
+            case 4 -> {
+                GameState.bookEffects.add(BookEffect.BURN_SHOT);
+                showDialog("書本強化：燃燒射擊\n子彈命中使敵人燃燒 2 秒！", 3.5);
+            }
         }
     }
 
@@ -106,8 +118,9 @@ public class RewardRoom extends Room {
         switch (i) {
             case 0 -> { player.heal(30);
                         showDialog("購買成功！回血 +30"); }
-            case 1 -> { GameState.damageMultiplier = Math.max(GameState.damageMultiplier, 1.3);
-                        showDialog("購買成功！傷害提升 30%"); }
+            case 1 -> { GameState.bookEffects.add(BookEffect.EXAM_QUESTIONS);
+                        GameState.damageMultiplier = Math.max(GameState.damageMultiplier, 1.3);
+                        showDialog("購買成功！書本強化：傷害提升 30%"); }
             case 2 -> { player.applySpeedBoost(1.2, 30.0);
                         showDialog("購買成功！速度提升 20%，30秒"); }
         }

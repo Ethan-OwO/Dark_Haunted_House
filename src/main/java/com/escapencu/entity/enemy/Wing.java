@@ -50,6 +50,10 @@ public class Wing extends Enemy {
     @Override
     public void takeDamage(int damage) { /* wings cannot be destroyed */ }
 
+    /** Wings are permanent floor objects — they must not block room-clear. */
+    @Override
+    public boolean countsForRoomClear() { return false; }
+
     // ── Draw ───────────────────────────────────────────────────────────────
 
     @Override

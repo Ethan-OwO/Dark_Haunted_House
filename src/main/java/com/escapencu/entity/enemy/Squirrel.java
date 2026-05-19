@@ -141,6 +141,7 @@ public class Squirrel extends Enemy {
             gc.setFill(Color.LIMEGREEN);
             gc.fillRect(x, y - 8, width * (double) hp / maxHp, 4);
         }
+        drawStatusEffects(gc);
         // No bullets to draw
     }
 

@@ -191,6 +191,7 @@ public class Goose extends Enemy {
             gc.setFill(berserk ? Color.ORANGERED : Color.LIMEGREEN);
             gc.fillRect(x, y - 8, width * (double) hp / maxHp, 4);
         }
+        drawStatusEffects(gc);
     }
 
     public boolean isCharging() { return charging; }
