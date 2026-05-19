@@ -9,7 +9,10 @@ import com.escapencu.entity.Bullet;
 import com.escapencu.entity.EffectBullet;
 import com.escapencu.entity.Enemy;
 import com.escapencu.entity.Entity;
+import com.escapencu.entity.FirePatch;
+import com.escapencu.entity.LeBronSkill;
 import com.escapencu.entity.Player;
+import com.escapencu.lebron.LeBronUltimate;
 import com.escapencu.entity.boss.ChenQinHan;
 import com.escapencu.entity.boss.ShiGuoZhen;
 import com.escapencu.entity.boss.WuXiaoGuang;
@@ -27,6 +30,7 @@ import javafx.scene.canvas.GraphicsContext;
 import javafx.scene.input.KeyCode;
 import javafx.scene.layout.StackPane;
 import javafx.scene.paint.Color;
+import javafx.scene.text.Font;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -42,6 +46,10 @@ public class GameScene {
     private DungeonFloor    dungeon;
     private Room            currentRoom;
     private GameLoop        gameLoop;
+
+    private LeBronSkill            lebronSkill = null;
+    private final List<FirePatch>  firePatches = new ArrayList<>();
+    private StackPane              rootPane    = null;
 
     private final CommandConsole console = new CommandConsole();
     private final Set<KeyCode> pressedKeys    = new HashSet<>();
@@ -128,6 +136,23 @@ public class GameScene {
             if (e.getCode() == KeyCode.DIGIT1) { handleShopBuy(0); }
             if (e.getCode() == KeyCode.DIGIT2) { handleShopBuy(1); }
             if (e.getCode() == KeyCode.DIGIT3) { handleShopBuy(2); }
+            if (e.getCode() == KeyCode.Q
+                    && GameState.selectedTalent == GameState.Talent.LEBRON
+                    && !GameState.talentUsedThisStage
+                    && lebronSkill == null
+                    && currentRoom != null) {
+                GameState.talentUsedThisStage = true;
+                double roomCX = currentRoom.worldX + currentRoom.worldW / 2.0;
+                double roomCY = currentRoom.worldY + currentRoom.worldH / 2.0;
+                double entryX = camX() - 80;
+                lebronSkill = new LeBronSkill(entryX, roomCX, roomCY);
+                // 全螢幕大招動畫 overlay
+                if (rootPane != null) {
+                    LeBronUltimate ult = new LeBronUltimate(GameApp.WIDTH, GameApp.HEIGHT);
+                    rootPane.getChildren().add(ult);
+                    ult.play(() -> rootPane.getChildren().remove(ult));
+                }
+            }
         });
         canvas.setOnKeyTyped(e -> console.typeChar(e.getCharacter()));
         canvas.setOnKeyReleased(e  -> pressedKeys.remove(e.getCode()));
@@ -137,7 +162,8 @@ public class GameScene {
         gameLoop = new GameLoop(this);
         gameLoop.start();
 
-        Scene scene = new Scene(new StackPane(canvas), GameApp.WIDTH, GameApp.HEIGHT);
+        rootPane = new StackPane(canvas);
+        Scene scene = new Scene(rootPane, GameApp.WIDTH, GameApp.HEIGHT);
         canvas.requestFocus();
         return scene;
     }
@@ -157,6 +183,15 @@ public class GameScene {
         double py = start.worldY + start.worldH / 2.0 - 16;
         player = new Player(px, py);
         GameState.playerHp = player.getHp();
+
+        // 換 Stage 時補充 LeBron 技能次數
+        int newStage = levelManager.getStage();
+        if (newStage != GameState.currentStage) {
+            GameState.talentUsedThisStage = false;
+            GameState.currentStage = newStage;
+        }
+        firePatches.clear();
+        lebronSkill = null;
     }
 
     // ── Camera helper ──────────────────────────────────────────────────────
@@ -217,6 +252,25 @@ public class GameScene {
         // Move player
         player.handleMovement(pressedKeys, deltaTime, buildAreaChecker());
         player.update(deltaTime);
+
+        // LeBron 技能動畫
+        if (lebronSkill != null) {
+            List<Entity> skillEnemies = (currentRoom != null) ? currentRoom.getEnemies() : List.of();
+            lebronSkill.update(deltaTime, skillEnemies);
+            List<FirePatch> pending = lebronSkill.getPendingFire();
+            if (!pending.isEmpty()) {
+                firePatches.addAll(pending);
+                pending.clear();
+            }
+            if (!lebronSkill.isAlive()) lebronSkill = null;
+        }
+
+        // 火焰效果更新
+        if (!firePatches.isEmpty() && currentRoom != null) {
+            List<Entity> fEnemies = currentRoom.getEnemies();
+            firePatches.removeIf(f -> !f.isAlive());
+            for (FirePatch f : firePatches) f.update(deltaTime, player, fEnemies);
+        }
 
         // Track which room the player is in.
         // Activate enemies as soon as the player's center enters.
@@ -294,6 +348,10 @@ public class GameScene {
         gc.save();
         gc.translate(-camX() + shakeX, -camY() + shakeY);
         dungeon.draw(gc);
+        // 火焰（地板層，在玩家下方）
+        for (FirePatch f : firePatches) f.draw(gc);
+        // LeBron 技能動畫
+        if (lebronSkill != null) lebronSkill.draw(gc);
         for (Bullet b : player.getBullets()) b.draw(gc);
         player.draw(gc);
         gc.restore();
@@ -563,6 +621,11 @@ public class GameScene {
             // Small "書本強化" header above the effect rows
             gc.setFill(Color.color(1.0, 1.0, 1.0, 0.55));
             gc.fillText("── 書本強化 ──", bx, by);
+        if (GameState.selectedTalent == GameState.Talent.LEBRON) {
+            boolean used = GameState.talentUsedThisStage;
+            gc.setFont(Font.font(14));
+            gc.setFill(used ? Color.GRAY : Color.web("#FDB927"));
+            gc.fillText(used ? "LeBron [Q] ——" : "LeBron [Q] 就緒", 10, GameApp.HEIGHT - 15);
         }
     }
 
