@@ -68,9 +68,19 @@ public abstract class Room {
         enemies.addAll(pending);
 
         enemies.removeIf(e -> !e.isAlive());
+
+        // Build live-enemy list for steering separation (one allocation per frame)
+        List<Enemy> liveEnemies = new ArrayList<>();
+        for (Entity e : enemies)
+            if (e instanceof Enemy en) liveEnemies.add(en);
+
         for (Entity e : enemies) {
-            if (e instanceof Enemy en) en.update(deltaTime, player);
-            else e.update(deltaTime);
+            if (e instanceof Enemy en) {
+                en.setSteeringNeighbors(liveEnemies);
+                en.update(deltaTime, player);
+            } else {
+                e.update(deltaTime);
+            }
         }
         // Cleared when no alive entity that counts toward room-clear remains
         // (permanent floor objects like Wing are excluded via countsForRoomClear())

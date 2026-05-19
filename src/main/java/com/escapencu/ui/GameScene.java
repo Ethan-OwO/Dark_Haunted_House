@@ -21,6 +21,7 @@ import com.escapencu.entity.enemy.Squirrel;
 import com.escapencu.entity.enemy.Termite;
 import com.escapencu.level.DungeonFloor;
 import com.escapencu.level.LevelManager;
+import com.escapencu.level.NormalRoom;
 import com.escapencu.level.RewardRoom;
 import com.escapencu.level.Room;
 import com.escapencu.util.CollisionUtil;
@@ -207,28 +208,41 @@ public class GameScene {
      * that room (prevents entrance-stuck bug).
      */
     private AreaChecker buildAreaChecker() {
-        if (currentRoom == null) return dungeon::canMoveTo;
-        if (currentRoom.isCleared()) return dungeon::canMoveTo;
-        if (currentRoom.type != Room.Type.NORMAL && currentRoom.type != Room.Type.BOSS)
-            return dungeon::canMoveTo;
-
-        // Only enforce lock while the player is fully inside the room
         double e = 0.5;
         double px = player.getX(), py = player.getY();
         double pw = player.getWidth(), ph = player.getHeight();
-        final Room r = currentRoom;
-        boolean fullyInside = r.containsPoint(px + e,      py + e)
-                           && r.containsPoint(px + pw - e, py + e)
-                           && r.containsPoint(px + e,      py + ph - e)
-                           && r.containsPoint(px + pw - e, py + ph - e);
 
-        if (!fullyInside) return dungeon::canMoveTo;
+        // ── Step 1: base movement bounds ──────────────────────────────────
+        AreaChecker base;
+        if (currentRoom == null || currentRoom.isCleared()
+                || (currentRoom.type != Room.Type.NORMAL && currentRoom.type != Room.Type.BOSS)) {
+            base = dungeon::canMoveTo;
+        } else {
+            // Only enforce combat-room lock while the player is fully inside
+            final Room r = currentRoom;
+            boolean fullyInside = r.containsPoint(px + e,      py + e)
+                               && r.containsPoint(px + pw - e, py + e)
+                               && r.containsPoint(px + e,      py + ph - e)
+                               && r.containsPoint(px + pw - e, py + ph - e);
+            if (!fullyInside) {
+                base = dungeon::canMoveTo;
+            } else {
+                base = (npx, npy, npw, nph) ->
+                    r.containsPoint(npx + e,        npy + e)
+                 && r.containsPoint(npx + npw - e,  npy + e)
+                 && r.containsPoint(npx + e,        npy + nph - e)
+                 && r.containsPoint(npx + npw - e,  npy + nph - e);
+            }
+        }
 
-        return (npx, npy, npw, nph) ->
-            r.containsPoint(npx + e,        npy + e)
-         && r.containsPoint(npx + npw - e,  npy + e)
-         && r.containsPoint(npx + e,        npy + nph - e)
-         && r.containsPoint(npx + npw - e,  npy + nph - e);
+        // ── Step 2: layer on obstacle blocking (NormalRoom only) ──────────
+        if (currentRoom instanceof NormalRoom nr) {
+            AreaChecker finalBase = base;
+            return (npx, npy, npw, nph) ->
+                finalBase.canMoveTo(npx, npy, npw, nph)
+             && !nr.blockedByObstacle(npx, npy, npw, nph);
+        }
+        return base;
     }
 
     // ── Update (called by GameLoop) ────────────────────────────────────────
