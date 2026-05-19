@@ -58,6 +58,63 @@ public class Enemy extends Entity {
         roomMaxY = maxY;
     }
 
+    // ── Obstacle checker (set by NormalRoom when spawning) ─────────────────
+    protected AreaChecker obstacleChecker = null;
+
+    /**
+     * When true, this enemy ignores room obstacles entirely (e.g. Termite alate
+     * phase hovering over furniture).  Room walls (roomBounds) still apply.
+     */
+    protected boolean ignoreObstacles = false;
+
+    /**
+     * Supplies a checker so the enemy cannot walk through room obstacles.
+     * canMoveTo returns true when the given rectangle is free of obstacles.
+     */
+    public void setObstacleChecker(AreaChecker checker) {
+        this.obstacleChecker = checker;
+    }
+
+    // ── Steering: separation from other enemies ────────────────────────────
+    private List<Enemy> steeringNeighbors = Collections.emptyList();
+
+    // Separation: push away from enemies within this radius
+    private static final double SEP_RADIUS   = 70.0;
+    private static final double SEP_WEIGHT   = 0.55;
+    // Obstacle probe: look this far ahead to steer around obstacles
+    private static final double PROBE_DIST   = 52.0;
+    private static final double AVOID_WEIGHT = 1.4;
+
+    /**
+     * Called by Room.update() each frame before this enemy updates.
+     * Provides the neighbor list for separation steering.
+     */
+    public void setSteeringNeighbors(List<Enemy> neighbors) {
+        this.steeringNeighbors = neighbors;
+    }
+
+    // ── Encirclement: each enemy approaches from a personal angle ──────────
+    /** Randomised once at spawn — determines which side of the player this enemy approaches from. */
+    private final double approachAngle  = Math.random() * Math.PI * 2;
+    private static final double ENCIRCLE_RADIUS = 85.0; // px offset from player centre
+
+    /**
+     * Returns the effective movement target for chasing the player.
+     * When far, returns a point beside the player at this enemy's personal
+     * approach angle so groups of enemies encircle rather than stack.
+     * When already close, returns the player's exact position.
+     */
+    protected double[] chaseTarget(double playerX, double playerY) {
+        double dist = Math.hypot(playerX - getCenterX(), playerY - getCenterY());
+        if (dist < ENCIRCLE_RADIUS * 1.5) return new double[]{playerX, playerY};
+        double tx = playerX + Math.cos(approachAngle) * ENCIRCLE_RADIUS;
+        double ty = playerY + Math.sin(approachAngle) * ENCIRCLE_RADIUS;
+        // Keep target inside room bounds
+        tx = Math.max(roomMinX, Math.min(roomMaxX, tx));
+        ty = Math.max(roomMinY, Math.min(roomMaxY, ty));
+        return new double[]{tx, ty};
+    }
+
     /**
      * Clamps x/y to the walkable room area.
      * @return true if the position was actually clamped (hit a wall).
@@ -100,15 +157,107 @@ public class Enemy extends Entity {
 
     // ── AI helpers (call from subclass or TestRoom) ───────────────────────
 
-    /** Move toward a world position (respects slow effect). */
+    /**
+     * Move toward (tx, ty) using combined steering:
+     *   Seek       — head toward the target
+     *   Separation — push away from nearby enemies so they don't pile up
+     *   Obstacle probe — steer around obstacles detected ahead
+     *
+     * Subclasses can call this with any target (player, flank point, etc.)
+     * and the steering handles the rest.
+     */
     public void moveToward(double tx, double ty, double deltaTime) {
         double dx   = tx - getCenterX();
         double dy   = ty - getCenterY();
         double dist = Math.hypot(dx, dy);
         if (dist < 1) return;
+
+        // ── Seek (normalised direction toward target) ──────────────────────
+        double seekX = dx / dist;
+        double seekY = dy / dist;
+
+        // ── Separation: push away from nearby live enemies ─────────────────
+        double sepX = 0, sepY = 0;
+        for (Enemy n : steeringNeighbors) {
+            if (n == this || !n.isAlive()) continue;
+            double sdx   = getCenterX() - n.getCenterX();
+            double sdy   = getCenterY() - n.getCenterY();
+            double sdist = Math.hypot(sdx, sdy);
+            if (sdist > 0.1 && sdist < SEP_RADIUS) {
+                double str = (SEP_RADIUS - sdist) / SEP_RADIUS; // 0→1, stronger when closer
+                sepX += (sdx / sdist) * str;
+                sepY += (sdy / sdist) * str;
+            }
+        }
+
+        // ── Obstacle probe: three feelers ahead ───────────────────────────
+        double avoidX = 0, avoidY = 0;
+        if (obstacleChecker != null && !ignoreObstacles) {
+            double perpX = -seekY, perpY = seekX; // unit vector perpendicular (left)
+            // Centre probe, right-diagonal probe, left-diagonal probe
+            double[][] offs = {
+                { seekX * PROBE_DIST,
+                  seekY * PROBE_DIST },
+                { seekX * PROBE_DIST * 0.7 + perpX * PROBE_DIST * 0.7,
+                  seekY * PROBE_DIST * 0.7 + perpY * PROBE_DIST * 0.7 },
+                { seekX * PROBE_DIST * 0.7 - perpX * PROBE_DIST * 0.7,
+                  seekY * PROBE_DIST * 0.7 - perpY * PROBE_DIST * 0.7 }
+            };
+            double[][] push = {
+                { -seekX, -seekY },   // centre blocked  → push back
+                { -perpX, -perpY },   // right blocked   → push left
+                {  perpX,  perpY }    // left  blocked   → push right
+            };
+            for (int i = 0; i < 3; i++) {
+                double px = getCenterX() + offs[i][0] - width  / 2;
+                double py = getCenterY() + offs[i][1] - height / 2;
+                if (!obstacleChecker.canMoveTo(px, py, width, height)) {
+                    avoidX += push[i][0];
+                    avoidY += push[i][1];
+                }
+            }
+        }
+
+        // ── Combine all forces into one normalised direction ───────────────
+        double finalX = seekX + sepX * SEP_WEIGHT + avoidX * AVOID_WEIGHT;
+        double finalY = seekY + sepY * SEP_WEIGHT + avoidY * AVOID_WEIGHT;
+        double mag    = Math.hypot(finalX, finalY);
+        if (mag > 0.001) { finalX /= mag; finalY /= mag; }
+        else             { finalX = seekX; finalY = seekY; } // fallback: seek only
+
         double effectiveSpeed = speed * (enemySlowTimer > 0 ? ENEMY_SLOW_FACTOR : 1.0);
-        x += (dx / dist) * effectiveSpeed * deltaTime;
-        y += (dy / dist) * effectiveSpeed * deltaTime;
+        moveBy(finalX * effectiveSpeed * deltaTime, finalY * effectiveSpeed * deltaTime);
+    }
+
+    /**
+     * Move by (dx, dy), sliding along obstacles when the full vector is blocked.
+     * Tries the full move first; if blocked, tries X-only then Y-only (wall-slide).
+     *
+     * @return true if any movement occurred, false if completely stuck.
+     */
+    protected boolean moveBy(double dx, double dy) {
+        if (obstacleChecker == null || ignoreObstacles) {
+            x += dx;
+            y += dy;
+            return true;
+        }
+        // Full move free?
+        if (obstacleChecker.canMoveTo(x + dx, y + dy, width, height)) {
+            x += dx;
+            y += dy;
+            return true;
+        }
+        // Try sliding along each axis independently
+        boolean movedX = false, movedY = false;
+        if (Math.abs(dx) > 0.001 && obstacleChecker.canMoveTo(x + dx, y, width, height)) {
+            x += dx;
+            movedX = true;
+        }
+        if (Math.abs(dy) > 0.001 && obstacleChecker.canMoveTo(x, y + dy, width, height)) {
+            y += dy;
+            movedY = true;
+        }
+        return movedX || movedY;
     }
 
     /** Fire a bullet toward a world position (respects cooldown). */

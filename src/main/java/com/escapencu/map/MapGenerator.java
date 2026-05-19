@@ -80,8 +80,16 @@ public class MapGenerator {
                 new RewardRoom(pos[0], pos[1], randomRewardType()));
         }
 
-        // ── Step 6: corridor flags + assembly ─────────────────────────────
+        // ── Step 6: corridor flags ────────────────────────────────────────
         applyCorridorFlags();
+
+        // ── Step 7: pre-generate obstacles (needs corridors to be known) ──
+        for (int gy = 0; gy < GRID; gy++)
+            for (int gx = 0; gx < GRID; gx++)
+                if (grid[gy][gx] instanceof NormalRoom nr)
+                    nr.initObstacles();
+
+        // ── Step 8: assemble ──────────────────────────────────────────────
         return assembleDungeonFloor();
     }
 

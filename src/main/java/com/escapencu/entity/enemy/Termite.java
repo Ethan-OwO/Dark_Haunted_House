@@ -61,6 +61,14 @@ public class Termite extends Enemy {
     private boolean wingSpawned     = false;  // poison zone when wings drop
     private boolean deathSpawned    = false;  // poison zone on death (alate only)
 
+    // ── Kiting (alate phase: keep player in spit range, avoid melee) ───────
+    private static final double KITE_MIN  = 120.0; // back away when closer than this
+    private static final double KITE_MAX  = 240.0; // approach when farther than this
+    // Strafe: move sideways while in sweet-spot to make it harder to dodge-back
+    private double strafeDir   = (Math.random() > 0.5) ? 1.0 : -1.0;
+    private double strafeTimer = 0.0;
+    private static final double STRAFE_INTERVAL = 1.8; // seconds before reversing strafe
+
     // ── Saliva spit (alate phase only) ────────────────────────────────────
     private static final double SPIT_COOLDOWN = 2.2; // seconds between spits
     private static final double SPIT_SPEED    = 160.0;
@@ -69,8 +77,9 @@ public class Termite extends Enemy {
 
     public Termite(double x, double y, int stage) {
         super(x, y, 32, 32, 20 * stage, 75, 4 * stage);
-        shootCooldown = SPIT_COOLDOWN;
-        bulletDamage  = 2 * stage; // spit damage (lower than old shoot)
+        shootCooldown  = SPIT_COOLDOWN;
+        bulletDamage   = 2 * stage; // spit damage (lower than old shoot)
+        ignoreObstacles = true;     // alate phase: hover over furniture
     }
 
     @Override
@@ -83,16 +92,55 @@ public class Termite extends Enemy {
             if (wingTimer <= 0) {
                 hasWings        = false;
                 transitionTimer = TRANSITION_DURATION;
-                speed          *= 1.4;    // worker is faster
+                speed          *= 2.0;    // worker sprints at 2× alate speed
                 shootCooldown   = 999;    // worker stops shooting
+                ignoreObstacles = false;  // worker can no longer fly over obstacles
             }
         }
         if (transitionTimer > 0) transitionTimer -= deltaTime;
 
         // ── Movement & animation ──────────────────────────────────────────
-        updateDir(player.getCenterX(), player.getCenterY());
+        double pcx  = player.getCenterX();
+        double pcy  = player.getCenterY();
+        double dxP  = pcx - getCenterX();
+        double dyP  = pcy - getCenterY();
+        double dist = Math.hypot(dxP, dyP);
+
+        double targetX, targetY;
+        if (hasWings && dist > 0.1) {
+            // ── Alate kiting: maintain spit range, strafe sideways ─────────
+            strafeTimer -= deltaTime;
+            if (strafeTimer <= 0) {
+                strafeDir   = (Math.random() > 0.5) ? 1.0 : -1.0;
+                strafeTimer = STRAFE_INTERVAL + Math.random() * 0.8;
+            }
+            double perpX = -dyP / dist; // unit vector perpendicular to player direction
+            double perpY =  dxP / dist;
+
+            if (dist < KITE_MIN) {
+                // Too close: back directly away from player
+                targetX = getCenterX() - (dxP / dist) * KITE_MAX;
+                targetY = getCenterY() - (dyP / dist) * KITE_MAX;
+            } else if (dist > KITE_MAX) {
+                // Too far: close in
+                targetX = pcx;
+                targetY = pcy;
+            } else {
+                // Sweet spot: strafe perpendicular to keep a moving target
+                targetX = getCenterX() + perpX * strafeDir * 60;
+                targetY = getCenterY() + perpY * strafeDir * 60;
+            }
+        } else {
+            // ── Worker phase: charge straight at player ────────────────────
+            double[] ct = chaseTarget(pcx, pcy);
+            targetX = ct[0];
+            targetY = ct[1];
+        }
+
+        updateDir(targetX, targetY);
         double prevX = x, prevY = y;
-        moveToward(player.getCenterX(), player.getCenterY(), deltaTime);
+        moveToward(targetX, targetY, deltaTime);
+        clampToRoom();
         boolean moving = (Math.abs(x - prevX) > 0.001 || Math.abs(y - prevY) > 0.001);
         if (moving) { bobTime += deltaTime; bobOffset = Math.sin(bobTime * BOB_SPEED) * BOB_AMP; }
         else        { bobTime = 0; bobOffset = 0; }

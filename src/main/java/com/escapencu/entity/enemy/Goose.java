@@ -48,19 +48,31 @@ public class Goose extends Enemy {
 
     // ── Charge mechanic ────────────────────────────────────────────────────
     private static final double BASE_CHARGE_SPEED = 220.0;
-    private static final double BASE_CHARGE_TIME  = 1.5;
     private static final double BASE_CD_MIN       = 3.0;
     private static final double BERSERK_SPEED_MUL = 1.5;
     private static final double BERSERK_CD_MUL    = 0.5;
+    /** Safety cap: charge stops after this many px even if nothing blocks it. */
+    private static final double MAX_CHARGE_DIST   = 700.0;
 
-    private boolean charging    = false;
-    private double  chargeTimer = 0;
+    private boolean charging       = false;
+    private double  chargeDistLeft = 0;  // remaining px budget for current charge
     private double  chargeCD;
     private double  chargeDX, chargeDY;
 
     // ── Berserk state ──────────────────────────────────────────────────────
-    private boolean berserk         = false;
+    private boolean berserk           = false;
     private double  berserKFlashTimer = 0; // red tint flash on berserk trigger
+
+    // ── Patrol (when far from player) ─────────────────────────────────────
+    private double patrolAngle = Math.random() * Math.PI * 2; // current wander direction
+    private static final double PATROL_SPEED  = 1.1; // radians/s the angle rotates
+    private static final double PATROL_RADIUS = 80.0; // px from current pos to target
+    private static final double ENGAGE_DIST   = 300.0; // switch from patrol to approach
+
+    // ── Predictive charge ─────────────────────────────────────────────────
+    private double lastPcx    = 0, lastPcy = 0;
+    private boolean hasLastPos = false;
+    private static final double PREDICT_SECS = 0.35; // seconds to predict ahead
 
     public Goose(double x, double y, int stage) {
         super(x, y, 50, 50, 70 * stage, 35, 12 * stage);
@@ -85,8 +97,10 @@ public class Goose extends Enemy {
         // ── Charge / walk logic ───────────────────────────────────────────
         boolean moving;
         if (charging) {
-            x += chargeDX * chargeSpeed * deltaTime;
-            y += chargeDY * chargeSpeed * deltaTime;
+            double moveDX = chargeDX * chargeSpeed * deltaTime;
+            double moveDY = chargeDY * chargeSpeed * deltaTime;
+            boolean moved = moveBy(moveDX, moveDY);
+            chargeDistLeft -= Math.hypot(moveDX, moveDY);
             moving = true;
 
             currentDir = degToDir(Math.toDegrees(Math.atan2(chargeDY, chargeDX)));
@@ -98,31 +112,61 @@ public class Goose extends Enemy {
                 dashFrameTimer = DASH_FRAME_DUR;
             }
 
-            chargeTimer -= deltaTime;
-            if (chargeTimer <= 0 || clampToRoom()) {
+            // End charge: wall hit, obstacle (fully blocked), or distance budget gone
+            if (clampToRoom() || !moved || chargeDistLeft <= 0) {
                 charging = false;
-                // Berserk: re-lock immediately with a very short cooldown
                 chargeCD = berserk
                     ? 0.4 + Math.random() * 0.3
                     : cdBase + Math.random();
             }
         } else {
             chargeCD -= deltaTime;
-            updateDir(player.getCenterX(), player.getCenterY());
+
+            // ── Estimate player velocity from last-frame position delta ────
+            double pcx = player.getCenterX(), pcy = player.getCenterY();
+            double pvx = 0, pvy = 0;
+            if (hasLastPos && deltaTime > 0) {
+                pvx = (pcx - lastPcx) / deltaTime;
+                pvy = (pcy - lastPcy) / deltaTime;
+            }
+            lastPcx = pcx; lastPcy = pcy; hasLastPos = true;
+
+            // ── Walk: patrol when far away, close in when near ────────────
+            double dxP   = getCenterX() - pcx;
+            double dyP   = getCenterY() - pcy;
+            double distP = Math.hypot(dxP, dyP);
+
+            double targetX, targetY;
+            if (distP > ENGAGE_DIST && chargeCD > 1.0 && !berserk) {
+                // Patrol: rotate slowly so the goose circles instead of idling
+                patrolAngle += PATROL_SPEED * deltaTime;
+                targetX = getCenterX() + Math.cos(patrolAngle) * PATROL_RADIUS;
+                targetY = getCenterY() + Math.sin(patrolAngle) * PATROL_RADIUS;
+            } else {
+                double[] ct = chaseTarget(pcx, pcy);
+                targetX = ct[0];
+                targetY = ct[1];
+            }
+
+            updateDir(targetX, targetY);
             double prevX = x, prevY = y;
-            moveToward(player.getCenterX(), player.getCenterY(), deltaTime);
+            moveToward(targetX, targetY, deltaTime);
+            clampToRoom();
             moving = (Math.abs(x - prevX) > 0.001 || Math.abs(y - prevY) > 0.001);
 
+            // ── Charge trigger: predict where the player will be ──────────
             if (chargeCD <= 0) {
-                double dx   = player.getCenterX() - getCenterX();
-                double dy   = player.getCenterY() - getCenterY();
-                double dist = Math.hypot(dx, dy);
+                double predX = pcx + pvx * PREDICT_SECS;
+                double predY = pcy + pvy * PREDICT_SECS;
+                double dx    = predX - getCenterX();
+                double dy    = predY - getCenterY();
+                double dist  = Math.hypot(dx, dy);
                 if (dist > 1) {
-                    chargeDX      = dx / dist;
-                    chargeDY      = dy / dist;
-                    charging      = true;
-                    chargeTimer   = BASE_CHARGE_TIME * (berserk ? 0.8 : 1.0);
-                    dashFrame     = 0;
+                    chargeDX       = dx / dist;
+                    chargeDY       = dy / dist;
+                    charging       = true;
+                    chargeDistLeft = berserk ? MAX_CHARGE_DIST * 1.2 : MAX_CHARGE_DIST;
+                    dashFrame      = 0;
                     dashFrameTimer = DASH_FRAME_DUR;
                 }
             }
