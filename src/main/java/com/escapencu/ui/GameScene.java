@@ -157,12 +157,9 @@ public class GameScene {
         double py = start.worldY + start.worldH / 2.0 - 16;
         player = new Player(px, py);
         GameState.playerHp = player.getHp();
-<<<<<<< Updated upstream
-=======
 
         firePatches.clear();
         lebronSkill = null;
->>>>>>> Stashed changes
     }
 
     // ── Camera helper ──────────────────────────────────────────────────────
