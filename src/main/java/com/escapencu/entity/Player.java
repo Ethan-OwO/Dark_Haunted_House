@@ -17,6 +17,13 @@ public class Player extends Entity {
     private static final int    BULLET_DAMAGE  = 10;
     private static final double SHOOT_COOLDOWN = 0.28;
     private static final double SLOW_FACTOR    = 0.5;
+    private static final double DASH_SPEED_MULTIPLIER = 4.0; // 衝刺速度倍率
+    private static final double DASH_DURATION         = 0.15; // 衝刺持續時間
+    private static final double DASH_COOLDOWN         = 1.5;  // 衝刺冷卻時間
+
+    private double dashTimer     = 0; // 記錄衝刺狀態的倒數
+    private double dashCooldownTimer = 0; // 記錄冷卻時間的倒數
+    private double dashDx = 0, dashDy = 0; // 鎖定衝刺方向
 
     private double shootTimer  = 0;
     private double mouseWorldX, mouseWorldY;
@@ -86,6 +93,10 @@ public class Player extends Entity {
     public void update(double deltaTime) {
         if (dying) { deathTimer += deltaTime; return; }
 
+        if (dashTimer > 0) dashTimer -= deltaTime;
+        if (dashCooldownTimer > 0) dashCooldownTimer -= deltaTime;
+
+
         if (stunTimer > 0) { stunTimer -= deltaTime; moving = false; return; }
         if (slowTimer  > 0) slowTimer  -= deltaTime;
         if (shootTimer > 0) shootTimer -= deltaTime;
@@ -116,6 +127,8 @@ public class Player extends Entity {
 
     @Override
     public void takeDamage(int damage) {
+        if (dashTimer > 0) return;
+
         super.takeDamage(damage);
         if (!isAlive() && !dying) dying = true;
     }
@@ -155,21 +168,34 @@ public class Player extends Entity {
     public void handleMovement(Set<KeyCode> keys, double dt, AreaChecker area) {
         if (stunTimer > 0) { moving = false; return; }
         double speed = SPEED;
-        if (GameState.opMode)        speed *= 3.0;
-        else if (slowTimer      > 0) speed *= SLOW_FACTOR;
-        else if (speedBoostTimer > 0) speed *= speedBoostFactor;
         double dx = 0, dy = 0;
-        if (keys.contains(KeyCode.W) || keys.contains(KeyCode.UP))    dy -= 1;
-        if (keys.contains(KeyCode.S) || keys.contains(KeyCode.DOWN))  dy += 1;
-        if (keys.contains(KeyCode.A) || keys.contains(KeyCode.LEFT))  dx -= 1;
-        if (keys.contains(KeyCode.D) || keys.contains(KeyCode.RIGHT)) dx += 1;
-        if (dx != 0 && dy != 0) { dx *= 0.7071; dy *= 0.7071; }
 
-        moving = (dx != 0 || dy != 0);
-        if (moving) { lastDx = dx; lastDy = dy; }
+        // ▼ 如果正在衝刺，鎖定方向並大幅提升速度
+        if (dashTimer > 0) {
+            dx = dashDx;
+            dy = dashDy;
+            speed *= DASH_SPEED_MULTIPLIER;
+            moving = true;
+        } else {
+            // ▼ 原本的正常移動邏輯
+            if (GameState.opMode)        speed *= 3.0;
+            else if (slowTimer      > 0) speed *= SLOW_FACTOR;
+            else if (speedBoostTimer > 0) speed *= speedBoostFactor;
+
+            if (keys.contains(KeyCode.W) || keys.contains(KeyCode.UP))    dy -= 1;
+            if (keys.contains(KeyCode.S) || keys.contains(KeyCode.DOWN))  dy += 1;
+            if (keys.contains(KeyCode.A) || keys.contains(KeyCode.LEFT))  dx -= 1;
+            if (keys.contains(KeyCode.D) || keys.contains(KeyCode.RIGHT)) dx += 1;
+            if (dx != 0 && dy != 0) { dx *= 0.7071; dy *= 0.7071; }
+
+            moving = (dx != 0 || dy != 0);
+            if (moving) { lastDx = dx; lastDy = dy; }
+        }
 
         double newX = x + dx * speed * dt;
         double newY = y + dy * speed * dt;
+
+        // 衝刺時依然會受到牆壁阻擋，不會穿牆
         if (area.canMoveTo(newX, y, width, height)) x = newX;
         if (area.canMoveTo(x, newY, width, height)) y = newY;
     }
@@ -223,6 +249,13 @@ public class Player extends Entity {
         if (poisonTimer > 0) { gc.setFill(Color.LIMEGREEN); gc.fillText("毒", x,      y - 5); }
         if (burnTimer   > 0) { gc.setFill(Color.ORANGE);    gc.fillText("燃", x + 16, y - 5); }
         if (slowTimer   > 0) { gc.setFill(Color.LIGHTBLUE); gc.fillText("緩", x + 32, y - 5); }
+
+        if (dashTimer > 0) {
+            // 衝刺時畫一個半透明的淺藍色光圈或是調整整體透明度
+            gc.setGlobalAlpha(0.6);
+        } else if (stunTimer > 0) {
+            gc.setGlobalAlpha(0.55);
+        }
     }
 
     private Image pickFrame() {
@@ -273,4 +306,35 @@ public class Player extends Entity {
     public boolean isSlowed() { return slowTimer > 0; }
 
     public List<Bullet> getBullets() { return bullets; }
+
+    public void dash() {
+        // 如果還在冷卻、暈眩中，或是已經在衝刺了，就不執行
+        if (dashCooldownTimer > 0 || stunTimer > 0 || dashTimer > 0) return;
+
+        // 決定衝刺方向
+        if (moving) {
+            // 如果玩家正在走動，往走動的方向衝刺
+            dashDx = lastDx;
+            dashDy = lastDy;
+        } else {
+            // 如果玩家站著不動，預設往他目前面向的地方衝刺
+            switch (currentDir) {
+                case N -> { dashDx = 0; dashDy = -1; }
+                case S -> { dashDx = 0; dashDy = 1; }
+                case E -> { dashDx = 1; dashDy = 0; }
+                case W -> { dashDx = -1; dashDy = 0; }
+            }
+        }
+
+        dashTimer = DASH_DURATION;
+        dashCooldownTimer = DASH_COOLDOWN;}
+
+    public double getDashCooldownTimer() {
+        return dashCooldownTimer;
+    }
+
+    public double getDashCooldownMax() {
+        return DASH_COOLDOWN; // 回傳你設定的 DASH_COOLDOWN (例如 1.5)
+    }
+
 }

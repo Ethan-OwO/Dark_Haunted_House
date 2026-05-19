@@ -119,6 +119,8 @@ public class GameScene {
 
             // ── Normal game input ──────────────────────────────────────────
             pressedKeys.add(e.getCode());
+            if (e.getCode() == KeyCode.SPACE) {
+                player.dash();}
             if (e.getCode() == KeyCode.F1) {
                 GameState.devMode = !GameState.devMode;
                 if (!GameState.devMode) GameState.opMode = false;
@@ -628,6 +630,45 @@ public class GameScene {
             gc.setFill(used ? Color.GRAY : Color.web("#FDB927"));
             gc.fillText(used ? "LeBron [Q] ——" : "LeBron [Q] 就緒", 10, GameApp.HEIGHT - 15);
         }
+        // ▼▼▼▼▼ 新增：右下角衝刺體力條 ▼▼▼▼▼
+        double dashCd = player.getDashCooldownTimer();
+        double dashMaxCd = player.getDashCooldownMax();
+
+        // 計算體力比例：冷卻時間為 0 時比例是 1.0 (滿檔)；剛衝刺完是 0.0。
+        double staminaRatio = (dashMaxCd > 0) ? Math.max(0, 1.0 - (dashCd / dashMaxCd)) : 1.0;
+
+        double staminaBarW = 150; // 體力條寬度
+        double staminaBarH = 16;  // 體力條高度
+        double staminaBarX = GameApp.WIDTH - staminaBarW - 20;  // 靠右 (留 20px 邊距)
+        double staminaBarY = GameApp.HEIGHT - staminaBarH - 20; // 靠下 (留 20px 邊距)
+
+        // 1. 畫底色 (空體力時的暗灰色背景)
+        gc.setFill(Color.color(0.2, 0.2, 0.2, 0.8));
+        gc.fillRect(staminaBarX, staminaBarY, staminaBarW, staminaBarH);
+
+        // 2. 畫目前的體力進度
+        if (staminaRatio >= 1.0) {
+            // 滿體力時顯示亮藍色 (代表可以衝刺)
+            gc.setFill(Color.web("#00E5FF"));
+        } else {
+            // 還在冷卻讀秒時，顯示暗藍綠色 (或改成黃色、灰色)
+            gc.setFill(Color.web("#006680"));
+        }
+        // 寬度會根據 staminaRatio 變動 (從 0 慢慢長大到 staminaBarW)
+        gc.fillRect(staminaBarX, staminaBarY, staminaBarW * staminaRatio, staminaBarH);
+
+        // 3. 畫外框
+        gc.setStroke(Color.WHITE);
+        gc.setLineWidth(1.5);
+        gc.strokeRect(staminaBarX, staminaBarY, staminaBarW, staminaBarH);
+
+        // 4. 畫文字提示
+        gc.setFill(Color.WHITE);
+        gc.setFont(Font.font(14));
+        String staminaText = (staminaRatio >= 1.0) ? "衝刺 READY [SPACE]" : "體力回復中...";
+        // 把文字畫在體力條的上方
+        gc.fillText(staminaText, staminaBarX, staminaBarY - 8);
+        // ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
     }
 
     // ── Mini-map (fog of war) ──────────────────────────────────────────────
