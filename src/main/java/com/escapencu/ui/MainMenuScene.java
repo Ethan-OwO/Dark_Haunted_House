@@ -23,7 +23,7 @@ public class MainMenuScene {
         Button startBtn = new Button("開始遊戲");
         startBtn.setFont(Font.font(24));
         startBtn.setPrefWidth(220);
-        startBtn.setOnAction(e -> SceneManager.showGame());
+        startBtn.setOnAction(e -> SceneManager.showTalentSelect());
 
         Button exitBtn = new Button("離開");
         exitBtn.setFont(Font.font(18));
