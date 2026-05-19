@@ -119,8 +119,8 @@ public class RewardRoom extends Room {
             case 0 -> { player.heal(30);
                         showDialog("購買成功！回血 +30"); }
             case 1 -> { GameState.bookEffects.add(BookEffect.EXAM_QUESTIONS);
-                        GameState.damageMultiplier = Math.max(GameState.damageMultiplier, 1.3);
-                        showDialog("購買成功！書本強化：傷害提升 30%"); }
+                        GameState.damageMultiplier = Math.max(GameState.damageMultiplier, 1.5);
+                        showDialog("購買成功！書本強化：傷害提升 50%"); }
             case 2 -> { player.applySpeedBoost(1.2, 30.0);
                         showDialog("購買成功！速度提升 20%，30秒"); }
         }

@@ -621,6 +621,7 @@ public class GameScene {
             // Small "書本強化" header above the effect rows
             gc.setFill(Color.color(1.0, 1.0, 1.0, 0.55));
             gc.fillText("── 書本強化 ──", bx, by);
+        }
         if (GameState.selectedTalent == GameState.Talent.LEBRON) {
             boolean used = GameState.talentUsedThisStage;
             gc.setFont(Font.font(14));
