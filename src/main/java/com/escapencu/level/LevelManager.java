@@ -26,7 +26,12 @@ public class LevelManager {
 
     public void advanceFloor() {
         floorNum++;
-        if (floorNum > 3) { floorNum = 1; stage++; }
+        if (floorNum > 3) {
+            floorNum = 1;
+            stage++;
+            // Stage 切換：補充所有每 Stage 限用一次的效果
+            GameState.talentUsedThisStage = false;
+        }
         GameState.currentStage = stage;
         GameState.currentRoom  = floorNum;
         generateFloor();
