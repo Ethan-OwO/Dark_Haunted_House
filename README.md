@@ -1,2 +1,26 @@
-# Dark-Haunted-House
-暗黑鬼屋
+# 🏚️ Dark Haunted House
+
+A text-based haunted house adventure game built with Java.
+
+## 🎮 How to Play
+...
+
+## 🚀 Getting Started
+
+### Prerequisites
+- Java 17+
+- Maven
+
+### Installation
+```bash
+git clone https://github.com/Ethan-OwO/Dark-Haunted-House.git
+cd Dark-Haunted-House
+mvn compile
+mvn exec:java
+```
+
+## 🗺️ Game Features
+- ...
+
+## 🤝 Contributing
+Please open a branch and submit a Pull Request. Direct pushes to `main` are not allowed.
