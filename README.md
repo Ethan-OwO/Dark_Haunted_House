@@ -13,8 +13,8 @@ A text-based haunted house adventure game built with Java.
 
 ### Installation
 ```bash
-git clone https://github.com/Ethan-OwO/Dark-Haunted-House.git
-cd Dark-Haunted-House
+git clone https://github.com/Ethan-OwO/Dark_Haunted_House.git
+cd Dark_Haunted_House
 mvn compile
 mvn exec:java
 ```
