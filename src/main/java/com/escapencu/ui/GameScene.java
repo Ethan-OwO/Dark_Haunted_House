@@ -30,6 +30,7 @@ import javafx.scene.canvas.Canvas;
 import javafx.scene.canvas.GraphicsContext;
 import javafx.scene.input.KeyCode;
 import javafx.scene.layout.StackPane;
+import javafx.scene.layout.VBox;
 import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
 
@@ -51,6 +52,11 @@ public class GameScene {
     private LeBronSkill            lebronSkill = null;
     private final List<FirePatch>  firePatches = new ArrayList<>();
     private StackPane              rootPane    = null;
+    // ── Pause variables ──────────────────────────────────────────────────────
+    private boolean isPaused = false;
+    private javafx.scene.layout.VBox pauseMenu;
+    //── Function checklist ──────────────────────────────────────────────────────
+    private VBox controlsMenu;
 
     private final CommandConsole console = new CommandConsole();
     private final Set<KeyCode> pressedKeys    = new HashSet<>();
@@ -118,6 +124,11 @@ public class GameScene {
                 return; // don't pass keys to game while console is open
             }
 
+            if (e.getCode() == KeyCode.P) {
+                togglePause();
+                return; // 避免觸發其他按鍵行為
+            }
+
             // ── Normal game input ──────────────────────────────────────────
             pressedKeys.add(e.getCode());
             if (e.getCode() == KeyCode.SPACE) {
@@ -165,10 +176,96 @@ public class GameScene {
         gameLoop = new GameLoop(this);
         gameLoop.start();
 
-        rootPane = new StackPane(canvas);
+        pauseMenu = buildPauseMenu();
+        pauseMenu.setVisible(false); // 預設隱藏
+        controlsMenu = buildControlsMenu();
+
+        rootPane = new StackPane(canvas, pauseMenu, controlsMenu);
         Scene scene = new Scene(rootPane, GameApp.WIDTH, GameApp.HEIGHT);
         canvas.requestFocus();
         return scene;
+    }
+    //pause控制介面
+    private javafx.scene.layout.VBox buildPauseMenu() {
+        javafx.scene.text.Text title = new javafx.scene.text.Text("遊戲暫停");
+        title.setFont(Font.font(52));
+        title.setFill(Color.WHITE);
+
+        javafx.scene.control.Button resumeBtn = new javafx.scene.control.Button("繼續遊戲");
+        resumeBtn.setFont(Font.font(24));
+        resumeBtn.setPrefWidth(220);
+        resumeBtn.setOnAction(e -> togglePause());
+
+        javafx.scene.control.Button controlsBtn = new javafx.scene.control.Button("操作說明");
+        controlsBtn.setFont(Font.font(24));
+        controlsBtn.setPrefWidth(220);
+        controlsBtn.setOnAction(e -> {
+            pauseMenu.setVisible(false);     // 隱藏暫停選單
+            controlsMenu.setVisible(true);   // 顯示操作說明
+        });
+
+        javafx.scene.control.Button menuBtn = new javafx.scene.control.Button("回主選單");
+        menuBtn.setFont(Font.font(24));
+        menuBtn.setPrefWidth(220);
+        menuBtn.setOnAction(e -> {
+            gameLoop.stop();
+            SceneManager.showMainMenu();
+        });
+
+        javafx.scene.layout.VBox box = new javafx.scene.layout.VBox(30, title, resumeBtn, controlsBtn, menuBtn);
+        box.setAlignment(javafx.geometry.Pos.CENTER);
+        box.setStyle("-fx-background-color: rgba(0, 0, 0, 0.75);"); // 半透明黑色背景
+        return box;
+    }
+
+    private void togglePause() {
+        isPaused = !isPaused;
+        pauseMenu.setVisible(isPaused);
+        if (!isPaused) {
+            canvas.requestFocus(); // 恢復時把焦點還給遊戲畫面，確保能繼續接收按鍵
+        }
+    }
+
+    private javafx.scene.layout.VBox buildControlsMenu() {
+        // 標題
+        javafx.scene.text.Text title = new javafx.scene.text.Text("操作說明");
+        title.setFont(Font.font(52));
+        title.setFill(Color.WHITE);
+
+        // 鍵位內容 (使用 Text 支援多行，並設定置中)
+        String controlsText = "W / A / S / D : 移動\n\n" +
+                "滑鼠左鍵 : 射擊\n\n" +
+                "Space (空白鍵) : 衝刺 / 翻滾\n\n";
+
+        // ▼▼▼ 修改重點 2：在此替換成你實際判斷玩家是否擁有該天賦的程式碼 ▼▼▼
+        // 例如：如果你的 player 實體有 boolean hasLeBronSkill 變數，可以寫成 if (player.hasLeBronSkill)
+        if (GameState.selectedTalent == GameState.Talent.LEBRON) {
+            controlsText += "Q : LeBron 技能 (砸地板)\n\n";}
+
+        // 最後加上共同的暫停鍵
+        controlsText += "P : 暫停遊戲";
+
+        javafx.scene.text.Text text = new javafx.scene.text.Text(controlsText);
+        text.setFont(Font.font(24));
+        text.setFill(Color.WHITE);
+        text.setTextAlignment(javafx.scene.text.TextAlignment.CENTER);
+
+        // 返回按鈕
+        javafx.scene.control.Button backBtn = new javafx.scene.control.Button("返回");
+        backBtn.setFont(Font.font(24));
+        backBtn.setPrefWidth(220);
+        backBtn.setOnAction(e -> {
+            controlsMenu.setVisible(false); // 隱藏操作說明
+            pauseMenu.setVisible(true);     // 重新顯示暫停選單
+        });
+
+        // ▼▼▼ 修改重點：直接在建構子放入元件 (title, text, backBtn) ▼▼▼
+        javafx.scene.layout.VBox box = new javafx.scene.layout.VBox(40, title, text, backBtn);
+        box.setAlignment(javafx.geometry.Pos.CENTER);
+        box.setStyle("-fx-background-color: rgba(0, 0, 0, 0.85);"); // 半透明黑底
+        box.setVisible(false); // 預設隱藏
+
+        return box;
     }
 
     // ── Load the current LevelManager floor ───────────────────────────────
@@ -247,6 +344,8 @@ public class GameScene {
 
     // ── Update (called by GameLoop) ────────────────────────────────────────
     public void update(double deltaTime) {
+        if (isPaused) return;//如果是暫停狀態，跳過所有邏輯更新
+
         console.update(deltaTime);
         if (console.isOpen()) return; // 打指令時凍結遊戲
 
@@ -535,6 +634,17 @@ public class GameScene {
 
         for (Bullet b : player.getBullets()) {
             if (!b.isAlive()) continue;
+
+            boolean hitWall = !dungeon.canMoveTo(b.getX(), b.getY(), b.getWidth(), b.getHeight());
+            if (!hitWall && currentRoom instanceof NormalRoom nr) {
+                hitWall = nr.blockedByObstacle(b.getX(), b.getY(), b.getWidth(), b.getHeight());
+            }
+
+            if (hitWall) {
+                b.hit();  // 呼叫 hit() 讓子彈失效/播放消失動畫
+                continue; // 既然已經撞牆，就不需要再檢查有沒有打到敵人了，直接換下一顆子彈
+            }
+
             for (Entity e : enemies) {
                 if (e.isAlive() && CollisionUtil.overlaps(b, e)) {
                     e.takeDamage(GameState.opMode ? 9999 : b.getDamage());
@@ -553,7 +663,23 @@ public class GameScene {
         }
 
         for (Bullet b : currentRoom.getEnemyBullets()) {
-            if (b.isAlive() && CollisionUtil.overlaps(b, player)) {
+            if (!b.isAlive()) continue;
+
+            // ▼▼▼ 1. 先判斷敵人子彈是否撞牆或碰到障礙物 ▼▼▼
+            boolean hitWall = !dungeon.canMoveTo(b.getX(), b.getY(), b.getWidth(), b.getHeight());
+            if (!hitWall && currentRoom instanceof NormalRoom nr) {
+                hitWall = nr.blockedByObstacle(b.getX(), b.getY(), b.getWidth(), b.getHeight());
+            }
+
+            // 如果撞牆了，子彈直接失效，換下一顆子彈
+            if (hitWall) {
+                b.hit();
+                continue;
+            }
+            // ▲▲▲ 撞牆判定結束 ▲▲▲
+
+            // 2. 如果沒撞牆，才判斷是否打中玩家
+            if (CollisionUtil.overlaps(b, player)) {
                 player.takeDamage(b.getDamage());
                 b.hit();
                 if (b instanceof EffectBullet eb) eb.applyEffect(player);
