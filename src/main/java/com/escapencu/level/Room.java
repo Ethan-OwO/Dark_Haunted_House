@@ -76,6 +76,12 @@ public abstract class Room {
 
         for (Entity e : enemies) {
             if (e instanceof Enemy en) {
+                // ▼▼▼ 修改點 1：攔截正在生成的怪物 ▼▼▼
+                if (en.isSpawning()) {
+                    en.decrementSpawnTimer(deltaTime);
+                    continue; // 生成中不執行尋路、射擊等 AI 邏輯
+                }
+                // ▲▲▲ 修改結束 ▲▲▲
                 en.setSteeringNeighbors(liveEnemies);
                 en.update(deltaTime, player);
             } else {
@@ -93,7 +99,15 @@ public abstract class Room {
     public final void draw(GraphicsContext gc) {
         drawFloor(gc);
         drawWalls(gc);
-        for (Entity e : enemies) e.draw(gc);
+        for (Entity e : enemies) {
+            // ▼▼▼ 修改點 2：根據生成狀態決定畫出警告光圈，還是怪物實體 ▼▼▼
+            if (e instanceof Enemy en && en.isSpawning()) {
+                en.drawSpawnWarning(gc); // 畫紅色閃爍光圈
+            } else {
+                e.draw(gc);              // 畫出真正的怪物
+            }
+        }
+        // ▲▲▲ 修改結束 ▲▲▲
     }
 
     /** Subclass draws the floor/background of the room. */
@@ -142,12 +156,12 @@ public abstract class Room {
     // ── Geometry helpers ───────────────────────────────────────────────────
     public boolean containsPoint(double px, double py) {
         return px >= worldX && px < worldX + worldW
-            && py >= worldY && py < worldY + worldH;
+                && py >= worldY && py < worldY + worldH;
     }
 
     public boolean overlaps(double px, double py, double pw, double ph) {
         return px < worldX + worldW && px + pw > worldX
-            && py < worldY + worldH && py + ph > worldY;
+                && py < worldY + worldH && py + ph > worldY;
     }
 
     // ── Accessors ──────────────────────────────────────────────────────────

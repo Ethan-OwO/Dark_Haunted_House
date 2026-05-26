@@ -11,6 +11,7 @@ public class TAEnemy extends Enemy {
     public TAEnemy(double x, double y, int stage) {
         super(x, y, 22, 22, 8 * stage, 110, 6 * stage);
         shootCooldown = 999;
+        this.spawnTimer = 0;
     }
 
     @Override

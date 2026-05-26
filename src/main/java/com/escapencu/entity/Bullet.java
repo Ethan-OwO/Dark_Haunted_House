@@ -10,6 +10,13 @@ public class Bullet extends Entity {
     private double age = 0;
     private static final double MAX_AGE = 3.0; // seconds before auto-despawn
 
+    // ▼▼▼ 修改點 1：新增穿牆屬性 ▼▼▼
+    private boolean ignoreWalls = false;
+
+    public boolean isIgnoreWalls() { return ignoreWalls; }
+    public void setIgnoreWalls(boolean ignoreWalls) { this.ignoreWalls = ignoreWalls; }
+    // ▲▲▲ 修改結束 ▲▲▲
+
     public Bullet(double cx, double cy, double vx, double vy, int damage, boolean fromPlayer) {
         super(cx - 5, cy - 5, 10, 10, 1);
         this.vx         = vx;

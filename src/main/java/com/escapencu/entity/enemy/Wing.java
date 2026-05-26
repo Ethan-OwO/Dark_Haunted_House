@@ -28,6 +28,8 @@ public class Wing extends Enemy {
         super(cx - RADIUS, cy - RADIUS, RADIUS * 2, RADIUS * 2, 999, 0, 0);
         shootCooldown = 999;
         poisonTimer   = POISON_DURATION;
+
+        spawnTimer    = 0;
     }
 
     // ── Update ─────────────────────────────────────────────────────────────
@@ -43,7 +45,7 @@ public class Wing extends Enemy {
         update(deltaTime);
         if (poisonTimer <= 0) return;           // aura expired, no more poison
         double dist = Math.hypot(player.getCenterX() - getCenterX(),
-                                 player.getCenterY() - getCenterY());
+                player.getCenterY() - getCenterY());
         if (dist < RADIUS) player.applyPoison(1.0); // refresh each tick while inside
     }
 

@@ -48,4 +48,6 @@ public abstract class Entity {
     public int     getMaxHp()  { return maxHp; }
     public double  getCenterX(){ return x + width  / 2; }
     public double  getCenterY(){ return y + height / 2; }
+    public void setX(double x) { this.x = x; }
+    public void setY(double y) { this.y = y; }
 }

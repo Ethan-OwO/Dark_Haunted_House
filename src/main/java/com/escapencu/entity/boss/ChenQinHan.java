@@ -47,7 +47,7 @@ public class ChenQinHan extends Boss {
                 burrowCD   = phase == 2 ? 2.5 : 4.0;
                 // Stun player if close
                 if (Math.hypot(getCenterX() - player.getCenterX(),
-                               getCenterY() - player.getCenterY()) < 50) {
+                        getCenterY() - player.getCenterY()) < 50) {
                     player.takeDamage(20);
                     player.applyStun(0.3);
                 }
@@ -88,15 +88,15 @@ public class ChenQinHan extends Boss {
             case 0 -> { // AND — fast, straight, high damage
                 double spd = 280;
                 bullets.add(new EffectBullet(getCenterX(), getCenterY(),
-                    nx * spd, ny * spd, 15, Color.LIMEGREEN, "AND", null));
+                        nx * spd, ny * spd, 15, Color.LIMEGREEN, "AND", null));
             }
             case 1 -> { // OR — 3-way spread
                 double spd = 200;
                 for (int a = -1; a <= 1; a++) {
                     double angle = Math.atan2(ny, nx) + a * Math.toRadians(15);
                     bullets.add(new EffectBullet(getCenterX(), getCenterY(),
-                        Math.cos(angle) * spd, Math.sin(angle) * spd,
-                        10, Color.ORANGE, "OR", null));
+                            Math.cos(angle) * spd, Math.sin(angle) * spd,
+                            10, Color.ORANGE, "OR", null));
                 }
             }
             case 2 -> { // XOR — fan spread, unpredictable
@@ -105,8 +105,8 @@ public class ChenQinHan extends Boss {
                 for (int i = -2; i <= 2; i++) {
                     double angle = base + i * Math.toRadians(15);
                     bullets.add(new EffectBullet(getCenterX(), getCenterY(),
-                        Math.cos(angle) * spd, Math.sin(angle) * spd,
-                        8, Color.MEDIUMPURPLE, "XOR", null));
+                            Math.cos(angle) * spd, Math.sin(angle) * spd,
+                            8, Color.MEDIUMPURPLE, "XOR", null));
                 }
             }
         }
@@ -121,6 +121,9 @@ public class ChenQinHan extends Boss {
             gc.setStroke(Color.YELLOW);
             gc.setLineWidth(2);
             gc.strokeOval(warningX - 40, warningY - 40, 80, 80);
+
+            for (var b : bullets) b.draw(gc);
+
             return; // boss body is underground
         }
 
