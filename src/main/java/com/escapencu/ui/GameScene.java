@@ -171,7 +171,17 @@ public class GameScene {
         canvas.setOnKeyTyped(e -> console.typeChar(e.getCharacter()));
         canvas.setOnKeyReleased(e  -> pressedKeys.remove(e.getCode()));
         canvas.setOnMouseMoved(e   -> { mouseScreenX = e.getX(); mouseScreenY = e.getY(); });
-        canvas.setOnMouseClicked(e -> { if (!console.isOpen()) player.shoot(); });
+        canvas.setOnMouseClicked(e -> {
+            if (!console.isOpen()) {
+                // 取得玩家當前踩著的房間
+                Room detected = dungeon.getRoomAt(player.getCenterX(), player.getCenterY());
+                // 如果玩家正在跨越未通關的戰鬥房門檻（還沒全身進去導致門沒關），則鎖定攻擊鍵
+                if (detected != null && detected != currentRoom && !detected.isCleared()) {
+                    return; // 門還沒關好，不給射擊！
+                }
+                player.shoot();
+            }
+        });
 
         gameLoop = new GameLoop(this);
         gameLoop.start();
@@ -318,17 +328,17 @@ public class GameScene {
             // Only enforce combat-room lock while the player is fully inside
             final Room r = currentRoom;
             boolean fullyInside = r.containsPoint(px + e,      py + e)
-                               && r.containsPoint(px + pw - e, py + e)
-                               && r.containsPoint(px + e,      py + ph - e)
-                               && r.containsPoint(px + pw - e, py + ph - e);
+                    && r.containsPoint(px + pw - e, py + e)
+                    && r.containsPoint(px + e,      py + ph - e)
+                    && r.containsPoint(px + pw - e, py + ph - e);
             if (!fullyInside) {
                 base = dungeon::canMoveTo;
             } else {
                 base = (npx, npy, npw, nph) ->
-                    r.containsPoint(npx + e,        npy + e)
-                 && r.containsPoint(npx + npw - e,  npy + e)
-                 && r.containsPoint(npx + e,        npy + nph - e)
-                 && r.containsPoint(npx + npw - e,  npy + nph - e);
+                        r.containsPoint(npx + e,        npy + e)
+                                && r.containsPoint(npx + npw - e,  npy + e)
+                                && r.containsPoint(npx + e,        npy + nph - e)
+                                && r.containsPoint(npx + npw - e,  npy + nph - e);
             }
         }
 
@@ -336,8 +346,8 @@ public class GameScene {
         if (currentRoom instanceof NormalRoom nr) {
             AreaChecker finalBase = base;
             return (npx, npy, npw, nph) ->
-                finalBase.canMoveTo(npx, npy, npw, nph)
-             && !nr.blockedByObstacle(npx, npy, npw, nph);
+                    finalBase.canMoveTo(npx, npy, npw, nph)
+                            && !nr.blockedByObstacle(npx, npy, npw, nph);
         }
         return base;
     }
@@ -391,31 +401,50 @@ public class GameScene {
         // Activate enemies as soon as the player's center enters.
         // For uncleared combat rooms, delay the currentRoom switch until the player's
         // entire body is inside (avoids the entrance-stuck bug at the boundary).
+        // ▼▼▼ 修改點 2：完美修正進門、關門與生怪順序 ▼▼▼
         Room detected = dungeon.getRoomAt(player.getCenterX(), player.getCenterY());
         if (detected != null) {
-            if (!detected.isActivated()) detected.activate();
+            // 注意：我們移除了原本提早執行的 detected.activate()
 
             if (detected != currentRoom) {
                 boolean needsFullEntry = !detected.isCleared()
                         && (detected.type == Room.Type.NORMAL
-                         || detected.type == Room.Type.BOSS);
+                        || detected.type == Room.Type.BOSS);
+
                 if (!needsFullEntry) {
+                    // 安全房間 (無怪) 直接進入並啟動
                     currentRoom = detected;
                     visitedRooms.add(currentRoom);
+                    if (!detected.isActivated()) detected.activate();
                 } else {
+                    // 戰鬥房間：必須等玩家「全身」都進入房間內
                     double e = 0.5;
                     double px = player.getX(), py = player.getY();
                     double pw = player.getWidth(), ph = player.getHeight();
+
                     if (detected.containsPoint(px + e,      py + e)
-                     && detected.containsPoint(px + pw - e, py + e)
-                     && detected.containsPoint(px + e,      py + ph - e)
-                     && detected.containsPoint(px + pw - e, py + ph - e)) {
+                            && detected.containsPoint(px + pw - e, py + e)
+                            && detected.containsPoint(px + e,      py + ph - e)
+                            && detected.containsPoint(px + pw - e, py + ph - e)) {
+
+                        // 1. 強制將玩家往房間內部推 10px，避免關門瞬間邊界重疊導致卡牆
+                        double pushDist = 10.0;
+                        if (px < detected.worldX + pushDist) player.setX(detected.worldX + pushDist);
+                        if (px + pw > detected.worldX + detected.worldW - pushDist) player.setX(detected.worldX + detected.worldW - pw - pushDist);
+                        if (py < detected.worldY + pushDist) player.setY(detected.worldY + pushDist);
+                        if (py + ph > detected.worldY + detected.worldH - pushDist) player.setY(detected.worldY + detected.worldH - ph - pushDist);
+
+                        // 2. 固定位置後，正式將門關上 (鎖定 currentRoom)
                         currentRoom = detected;
                         visitedRooms.add(currentRoom);
+
+                        // 3. 門確實關好後，才觸發房間啟動（生成怪物）
+                        if (!detected.isActivated()) detected.activate();
                     }
                 }
             }
         }
+        // ▲▲▲ 修改結束 ▲▲▲
 
         dungeon.update(deltaTime, player);
 
@@ -589,19 +618,19 @@ public class GameScene {
             case "wuxiaoguang", "無小光" -> {
                 WuXiaoGuang b = new WuXiaoGuang(sx, sy, st);
                 b.setRoomBounds(currentRoom.worldX, currentRoom.worldY,
-                                currentRoom.worldW, currentRoom.worldH);
+                        currentRoom.worldW, currentRoom.worldH);
                 yield b;
             }
             case "chenqinhan", "沉沁汗" -> {
                 ChenQinHan b = new ChenQinHan(sx, sy, st);
                 b.setRoomBounds(currentRoom.worldX, currentRoom.worldY,
-                                currentRoom.worldW, currentRoom.worldH);
+                        currentRoom.worldW, currentRoom.worldH);
                 yield b;
             }
             case "shiguozhen", "濕幗針" -> {
                 ShiGuoZhen b = new ShiGuoZhen(sx, sy, st);
                 b.setRoomBounds(currentRoom.worldX, currentRoom.worldY,
-                                currentRoom.worldW, currentRoom.worldH);
+                        currentRoom.worldW, currentRoom.worldH);
                 yield b;
             }
             default -> null;
@@ -646,6 +675,11 @@ public class GameScene {
             }
 
             for (Entity e : enemies) {
+
+                // ▼▼▼ 修改點 1：無敵狀態，子彈直接穿透正在生成的怪物 ▼▼▼
+                if (e instanceof Enemy en && en.isSpawning()) continue;
+                // ▲▲▲ 修改結束 ▲▲▲
+
                 if (e.isAlive() && CollisionUtil.overlaps(b, e)) {
                     e.takeDamage(GameState.opMode ? 9999 : b.getDamage());
                     b.hit();
@@ -672,7 +706,7 @@ public class GameScene {
             }
 
             // 如果撞牆了，子彈直接失效，換下一顆子彈
-            if (hitWall) {
+            if (hitWall && !b.isIgnoreWalls()) {
                 b.hit();
                 continue;
             }
@@ -688,6 +722,10 @@ public class GameScene {
 
         if (contactCooldown <= 0) {
             for (Entity e : enemies) {
+
+                // ▼▼▼ 修改點 2：生成中的怪物不會對玩家造成碰撞傷害 ▼▼▼
+                if (e instanceof Enemy en && en.isSpawning()) continue;
+                // ▲▲▲ 修改結束 ▲▲▲
                 if (e.isAlive() && CollisionUtil.overlaps(e, player)) {
                     int dmg = (e instanceof Enemy en) ? en.getContactDamage() : 5;
                     player.takeDamage(dmg);
@@ -723,8 +761,8 @@ public class GameScene {
                 ? "Boss Floor" : "Floor " + levelManager.getFloorNum();
         gc.setFill(Color.WHITE);
         gc.fillText("Stage " + levelManager.getStage() + "  " + floorLabel,
-                    GameApp.WIDTH / 2.0 - 60, 25);
-        gc.fillText("分數: " + GameState.score, GameApp.WIDTH - 120.0, 25);
+                GameApp.WIDTH / 2.0 - 60, 25);
+        gc.fillText("分數: " + GameState.score, GameApp.WIDTH - 170.0, 25);//原x值:120
 
         // Dev / OP tags
         if (GameState.devMode) {

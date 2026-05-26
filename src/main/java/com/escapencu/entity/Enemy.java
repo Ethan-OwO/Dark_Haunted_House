@@ -18,6 +18,29 @@ public class Enemy extends Entity {
     protected double shootCooldown;
     protected double shootTimer = 0;
     protected int    bulletDamage;
+    // ▼▼▼ 修改點 1：新增生成緩衝相關變數與方法 ▼▼▼
+    protected double spawnTimer = 1.0; // 預設 1 秒的生成緩衝
+
+    public boolean isSpawning() { return spawnTimer > 0; }
+
+    public void decrementSpawnTimer(double dt) { spawnTimer -= dt; }
+
+    public void drawSpawnWarning(GraphicsContext gc) {
+        double cx = getCenterX();
+        double cy = getCenterY();
+        // 讓光圈稍微比怪物本身大一點
+        double r = Math.max(width, height) / 2.0 * 1.3;
+        // 利用 sin 函數製作閃爍效果
+        double alpha = 0.2 + 0.6 * Math.abs(Math.sin(spawnTimer * 15));
+
+        gc.setFill(Color.color(1.0, 0.2, 0.2, alpha));
+        gc.fillOval(cx - r, cy - r, r * 2, r * 2);
+
+        gc.setStroke(Color.color(1.0, 0.0, 0.0, 0.8));
+        gc.setLineWidth(2.0);
+        gc.strokeOval(cx - r, cy - r, r * 2, r * 2);
+    }
+    // ▲▲▲ 修改結束 ▲▲▲
 
     protected final List<Bullet> bullets = new ArrayList<>();
 
@@ -196,17 +219,17 @@ public class Enemy extends Entity {
             double perpX = -seekY, perpY = seekX; // unit vector perpendicular (left)
             // Centre probe, right-diagonal probe, left-diagonal probe
             double[][] offs = {
-                { seekX * PROBE_DIST,
-                  seekY * PROBE_DIST },
-                { seekX * PROBE_DIST * 0.7 + perpX * PROBE_DIST * 0.7,
-                  seekY * PROBE_DIST * 0.7 + perpY * PROBE_DIST * 0.7 },
-                { seekX * PROBE_DIST * 0.7 - perpX * PROBE_DIST * 0.7,
-                  seekY * PROBE_DIST * 0.7 - perpY * PROBE_DIST * 0.7 }
+                    { seekX * PROBE_DIST,
+                            seekY * PROBE_DIST },
+                    { seekX * PROBE_DIST * 0.7 + perpX * PROBE_DIST * 0.7,
+                            seekY * PROBE_DIST * 0.7 + perpY * PROBE_DIST * 0.7 },
+                    { seekX * PROBE_DIST * 0.7 - perpX * PROBE_DIST * 0.7,
+                            seekY * PROBE_DIST * 0.7 - perpY * PROBE_DIST * 0.7 }
             };
             double[][] push = {
-                { -seekX, -seekY },   // centre blocked  → push back
-                { -perpX, -perpY },   // right blocked   → push left
-                {  perpX,  perpY }    // left  blocked   → push right
+                    { -seekX, -seekY },   // centre blocked  → push back
+                    { -perpX, -perpY },   // right blocked   → push left
+                    {  perpX,  perpY }    // left  blocked   → push right
             };
             for (int i = 0; i < 3; i++) {
                 double px = getCenterX() + offs[i][0] - width  / 2;
@@ -268,9 +291,9 @@ public class Enemy extends Entity {
         double dist = Math.hypot(dx, dy);
         if (dist < 1) return;
         bullets.add(new Bullet(getCenterX(), getCenterY(),
-                               (dx / dist) * bulletSpeed,
-                               (dy / dist) * bulletSpeed,
-                               bulletDamage, false));
+                (dx / dist) * bulletSpeed,
+                (dy / dist) * bulletSpeed,
+                bulletDamage, false));
         shootTimer = shootCooldown;
     }
 

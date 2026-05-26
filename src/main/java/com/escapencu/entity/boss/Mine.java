@@ -19,6 +19,7 @@ public class Mine extends Enemy {
     public Mine(double cx, double cy) {
         super(cx - 15, cy - 15, 30, 30, 1, 0, 0);
         shootCooldown = 999;
+        this.spawnTimer = 0;
     }
 
     @Override
@@ -35,7 +36,7 @@ public class Mine extends Enemy {
     public boolean checkProximity(Player player) {
         if (!isAlive()) return false;
         double dist = Math.hypot(player.getCenterX() - getCenterX(),
-                                 player.getCenterY() - getCenterY());
+                player.getCenterY() - getCenterY());
         if (dist < PROXIMITY) fuseStarted = true;
         return fuseStarted && fuseTimer >= 1.0;
     }

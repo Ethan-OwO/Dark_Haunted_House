@@ -19,6 +19,7 @@ public class Decoy extends Enemy {
         super(x, y, 56, 56, 1, 0, 0);
         this.stage = stage;
         shootCooldown = 999;
+        this.spawnTimer = 0;
     }
 
     @Override

@@ -90,11 +90,21 @@ public class Termite extends Enemy {
         if (hasWings) {
             wingTimer -= deltaTime;
             if (wingTimer <= 0) {
-                hasWings        = false;
-                transitionTimer = TRANSITION_DURATION;
-                speed          *= 2.0;    // worker sprints at 2× alate speed
-                shootCooldown   = 999;    // worker stops shooting
-                ignoreObstacles = false;  // worker can no longer fly over obstacles
+                // ▼▼▼ 修改點：新增降落安全檢查 ▼▼▼
+                // 利用 obstacleChecker 檢查目前的位置是否可以合法站立
+                boolean inObstacle = (obstacleChecker != null && !obstacleChecker.canMoveTo(x, y, width, height));
+
+                if (inObstacle) {
+                    // 如果還在障礙物裡面，把計時器卡在極小值，等牠飛到空地再觸發轉換
+                    wingTimer = 0.001;
+                } else {
+                    hasWings        = false;
+                    transitionTimer = TRANSITION_DURATION;
+                    speed          *= 2.0;    // worker sprints at 2× alate speed
+                    shootCooldown   = 999;    // worker stops shooting
+                    ignoreObstacles = false;  // worker can no longer fly over obstacles
+                }
+                // ▲▲▲ 修改結束 ▲▲▲
             }
         }
         if (transitionTimer > 0) transitionTimer -= deltaTime;
@@ -161,7 +171,7 @@ public class Termite extends Enemy {
         double dist = Math.hypot(dx, dy);
         if (dist < 1) return;
         int dmg = bulletDamage;
-        bullets.add(new EffectBullet(
+        EffectBullet spit = new EffectBullet(
                 getCenterX(), getCenterY(),
                 (dx / dist) * SPIT_SPEED,
                 (dy / dist) * SPIT_SPEED,
@@ -169,7 +179,12 @@ public class Termite extends Enemy {
                 SPIT_COLOR,
                 "",                         // no label — sprite will replace this later
                 p -> p.applySlow(1.8)
-        ));
+        );
+
+        // 只要是白蟻型態吐出來的，都賦予穿牆能力
+        spit.setIgnoreWalls(true);
+
+        bullets.add(spit);
         shootTimer = shootCooldown;
     }
 
