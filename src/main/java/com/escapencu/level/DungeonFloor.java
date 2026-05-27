@@ -54,10 +54,14 @@ public class DungeonFloor {
      */
     public boolean canMoveTo(double px, double py, double pw, double ph) {
         double e = 0.5; // tiny inset to avoid floating-point edge straddle
-        return isPassable(px + e,      py + e)
-            && isPassable(px + pw - e, py + e)
-            && isPassable(px + e,      py + ph - e)
-            && isPassable(px + pw - e, py + ph - e);
+        if (!isPassable(px + e,      py + e))      return false;
+        if (!isPassable(px + pw - e, py + e))      return false;
+        if (!isPassable(px + e,      py + ph - e)) return false;
+        if (!isPassable(px + pw - e, py + ph - e)) return false;
+        // Gate check: treat activated-but-uncleared room gates as solid walls
+        for (Room r : rooms)
+            if (r.overlapsGate(px, py, pw, ph)) return false;
+        return true;
     }
 
     private boolean isPassable(double wx, double wy) {

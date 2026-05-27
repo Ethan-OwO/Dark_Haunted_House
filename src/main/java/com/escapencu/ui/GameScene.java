@@ -73,6 +73,14 @@ public class GameScene {
     private double shakeDuration  = 0;
     private double shakeIntensity = 10.0;
 
+    // ── Room-clear banner ──────────────────────────────────────────────────
+    private static final Font PIXEL_FONT_LARGE = Font.loadFont(
+            GameScene.class.getResourceAsStream("/fonts/Cubic_11.ttf"), 52);
+    private static final double CLEAR_BANNER_DURATION = 2.2; // seconds to show
+    private double  clearBannerTimer    = 0;
+    private boolean prevRoomCleared     = false;  // cleared state last frame
+    private Room    prevTrackedRoom     = null;   // detects room changes
+
     /** Trigger a camera shake. intensity = max pixel offset. */
     private void triggerShake(double duration, double intensity) {
         shakeTimer    = duration;
@@ -447,6 +455,22 @@ public class GameScene {
         // ▲▲▲ 修改結束 ▲▲▲
 
         dungeon.update(deltaTime, player);
+
+        // ── Room-clear banner trigger ─────────────────────────────────────
+        if (currentRoom != prevTrackedRoom) {
+            // Player changed rooms — sync the "was cleared" baseline
+            prevTrackedRoom  = currentRoom;
+            prevRoomCleared  = (currentRoom != null && currentRoom.isCleared());
+        }
+        if (clearBannerTimer > 0) clearBannerTimer -= deltaTime;
+        boolean nowCleared = (currentRoom != null && currentRoom.isCleared());
+        if (nowCleared && !prevRoomCleared
+                && currentRoom.type != Room.Type.START
+                && currentRoom.type != Room.Type.REWARD
+                && currentRoom.type != Room.Type.EXIT) {
+            clearBannerTimer = CLEAR_BANNER_DURATION;
+        }
+        prevRoomCleared = nowCleared;
 
         if (contactCooldown > 0) contactCooldown -= deltaTime;
         if (shakeTimer      > 0) shakeTimer      -= deltaTime;
@@ -858,6 +882,31 @@ public class GameScene {
         // 把文字畫在體力條的上方
         gc.fillText(staminaText, staminaBarX, staminaBarY - 8);
         // ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
+
+        // ── Room-clear banner ─────────────────────────────────────────────
+        if (clearBannerTimer > 0) {
+            // Fade out during the last 0.8 s
+            double alpha = Math.min(1.0, clearBannerTimer / 0.8);
+            Font   font  = (PIXEL_FONT_LARGE != null) ? PIXEL_FONT_LARGE : Font.font(52);
+            gc.setFont(font);
+
+            String text  = "CLEAR!";
+            double textX = GameApp.WIDTH  / 2.0 - 90;
+            double textY = GameApp.HEIGHT / 4.0;       // 上方 1/4 處
+
+            // Drop shadow
+            gc.setGlobalAlpha(alpha * 0.6);
+            gc.setFill(Color.BLACK);
+            gc.fillText(text, textX + 3, textY + 3);
+
+            // Main text — gold gradient effect via two layers
+            gc.setGlobalAlpha(alpha);
+            gc.setFill(Color.color(1.0, 0.85, 0.1));
+            gc.fillText(text, textX, textY);
+
+            gc.setGlobalAlpha(1.0);
+            gc.setFont(Font.font(14)); // restore default font
+        }
     }
 
     // ── Mini-map (fog of war) ──────────────────────────────────────────────
