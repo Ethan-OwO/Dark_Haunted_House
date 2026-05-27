@@ -99,6 +99,7 @@ public abstract class Room {
     public final void draw(GraphicsContext gc) {
         drawFloor(gc);
         drawWalls(gc);
+        drawGates(gc);
         for (Entity e : enemies) {
             // ▼▼▼ 修改點 2：根據生成狀態決定畫出警告光圈，還是怪物實體 ▼▼▼
             if (e instanceof Enemy en && en.isSpawning()) {
@@ -151,6 +152,86 @@ public abstract class Room {
             gc.fillRect(rx, worldY, WALL, my - worldY - ct / 2);
             gc.fillRect(rx, my + ct / 2, WALL, worldY + worldH - my - ct / 2);
         }
+    }
+
+    /**
+     * Draws gate bars at every corridor opening while this room is activated
+     * but not yet cleared (NORMAL / BOSS only).
+     * Gates are drawn AFTER walls so they visually fill the gap.
+     */
+    private void drawGates(GraphicsContext gc) {
+        if (!activated || cleared) return;
+        if (type != Type.NORMAL && type != Type.BOSS) return;
+
+        double ct = DungeonFloor.CORRIDOR_THICK;
+
+        // Main bar colour — dark red
+        Color barColor  = Color.rgb(140, 25, 25);
+        // Highlight stripe along the top/left edge
+        Color highlight = Color.rgb(200, 60, 60);
+        double stripe   = 4.0;
+
+        if (hasCorridor[0]) {   // North
+            double gx = worldX + worldW / 2 - ct / 2;
+            double gy = worldY;
+            gc.setFill(barColor);  gc.fillRect(gx, gy, ct, WALL);
+            gc.setFill(highlight); gc.fillRect(gx, gy, ct, stripe);
+        }
+        if (hasCorridor[1]) {   // South
+            double gx = worldX + worldW / 2 - ct / 2;
+            double gy = worldY + worldH - WALL;
+            gc.setFill(barColor);  gc.fillRect(gx, gy, ct, WALL);
+            gc.setFill(highlight); gc.fillRect(gx, gy + WALL - stripe, ct, stripe);
+        }
+        if (hasCorridor[2]) {   // East
+            double gx = worldX + worldW - WALL;
+            double gy = worldY + worldH / 2 - ct / 2;
+            gc.setFill(barColor);  gc.fillRect(gx, gy, WALL, ct);
+            gc.setFill(highlight); gc.fillRect(gx + WALL - stripe, gy, stripe, ct);
+        }
+        if (hasCorridor[3]) {   // West
+            double gx = worldX;
+            double gy = worldY + worldH / 2 - ct / 2;
+            gc.setFill(barColor);  gc.fillRect(gx, gy, WALL, ct);
+            gc.setFill(highlight); gc.fillRect(gx, gy, stripe, ct);
+        }
+    }
+
+    /**
+     * Returns true when the given rectangle overlaps a gate of this room.
+     * Gates only exist while the room is activated and uncleared (NORMAL / BOSS).
+     * Used by DungeonFloor.canMoveTo() to physically block passage.
+     */
+    public boolean overlapsGate(double px, double py, double pw, double ph) {
+        if (!activated || cleared) return false;
+        if (type != Type.NORMAL && type != Type.BOSS) return false;
+
+        double ct = DungeonFloor.CORRIDOR_THICK;
+
+        if (hasCorridor[0]) {   // North
+            double gx = worldX + worldW / 2 - ct / 2;
+            if (rectsOverlap(px, py, pw, ph, gx, worldY, ct, WALL)) return true;
+        }
+        if (hasCorridor[1]) {   // South
+            double gx = worldX + worldW / 2 - ct / 2;
+            double gy = worldY + worldH - WALL;
+            if (rectsOverlap(px, py, pw, ph, gx, gy, ct, WALL)) return true;
+        }
+        if (hasCorridor[2]) {   // East
+            double gx = worldX + worldW - WALL;
+            double gy = worldY + worldH / 2 - ct / 2;
+            if (rectsOverlap(px, py, pw, ph, gx, gy, WALL, ct)) return true;
+        }
+        if (hasCorridor[3]) {   // West
+            double gy = worldY + worldH / 2 - ct / 2;
+            if (rectsOverlap(px, py, pw, ph, worldX, gy, WALL, ct)) return true;
+        }
+        return false;
+    }
+
+    private static boolean rectsOverlap(double ax, double ay, double aw, double ah,
+                                         double bx, double by, double bw, double bh) {
+        return ax < bx + bw && ax + aw > bx && ay < by + bh && ay + ah > by;
     }
 
     // ── Geometry helpers ───────────────────────────────────────────────────
