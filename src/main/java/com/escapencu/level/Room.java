@@ -1,6 +1,7 @@
 package com.escapencu.level;
 
 import com.escapencu.entity.Bullet;
+import com.escapencu.entity.Coin;
 import com.escapencu.entity.Enemy;
 import com.escapencu.entity.Entity;
 import com.escapencu.entity.Player;
@@ -36,6 +37,7 @@ public abstract class Room {
     private final boolean[] hasCorridor = new boolean[4];
 
     protected final List<Entity> enemies = new ArrayList<>();
+    protected final List<Coin>   coins   = new ArrayList<>();
 
     // ── Constructor ────────────────────────────────────────────────────────
     protected Room(int gridX, int gridY, Type type) {
@@ -67,6 +69,13 @@ public abstract class Room {
             if (e instanceof Enemy en) pending.addAll(en.getPendingSpawns());
         enemies.addAll(pending);
 
+        // Spawn coins for newly-dead enemies (checked before removal)
+        for (Entity e : enemies) {
+            if (!e.isAlive() && e instanceof Enemy en && !en.hasCoinDropped()) {
+                en.markCoinDropped();
+                spawnCoins(en);
+            }
+        }
         enemies.removeIf(e -> !e.isAlive());
 
         // Build live-enemy list for steering separation (one allocation per frame)
@@ -93,6 +102,24 @@ public abstract class Room {
         if (!cleared && enemies.stream().noneMatch(e -> e.isAlive() && e.countsForRoomClear())) {
             cleared = true;
         }
+
+        // Update and collect coins — clamp each coin to inner room bounds
+        coins.removeIf(Coin::isCollected);
+        double innerMinX = worldX + WALL + 4;
+        double innerMinY = worldY + WALL + 4;
+        double innerMaxX = worldX + worldW - WALL - 4;
+        double innerMaxY = worldY + worldH - WALL - 4;
+        for (Coin c : coins) {
+            c.update(deltaTime, player);
+            c.clampToBounds(innerMinX, innerMinY, innerMaxX, innerMaxY);
+        }
+    }
+
+    /** Scatter coins from a dead enemy — each coin is worth 1 point. */
+    private void spawnCoins(Enemy en) {
+        int count = Math.min(en.getCoinValue(), 25); // cap at 25 per kill to limit object count
+        for (int i = 0; i < count; i++)
+            coins.add(new Coin(en.getCenterX(), en.getCenterY(), 1));
     }
 
     // ── Draw (world coordinates) ───────────────────────────────────────────
@@ -109,6 +136,9 @@ public abstract class Room {
             }
         }
         // ▲▲▲ 修改結束 ▲▲▲
+
+        // ── Dropped coins (drawn on top of floor, below player) ───────────
+        for (Coin c : coins) c.draw(gc);
     }
 
     /** Subclass draws the floor/background of the room. */
@@ -232,6 +262,28 @@ public abstract class Room {
     private static boolean rectsOverlap(double ax, double ay, double aw, double ah,
                                          double bx, double by, double bw, double bh) {
         return ax < bx + bw && ax + aw > bx && ay < by + bh && ay + ah > by;
+    }
+
+    // ── Stage colour helpers (shared by NormalRoom / RewardRoom / BossRoom) ──
+    /**
+     * Solid wall colour that matches the stage tile palette.
+     * Pass the stage field of the calling room.
+     */
+    protected static Color stageWallColor(int stage) {
+        return switch (stage) {
+            case 1  -> Color.rgb(35,  62,  30);   // dark forest green  (Stage 1 — 工程五館)
+            case 2  -> Color.rgb(28,  42,  82);   // dark navy blue     (Stage 2 — 男13宿舍)
+            default -> Color.rgb(58,  36,  26);   // dark brick brown   (Stage 3 — 圖書館)
+        };
+    }
+
+    /** Dark edge strip colour between wall and tiled floor. */
+    protected static Color stageWallEdgeColor(int stage) {
+        return switch (stage) {
+            case 1  -> Color.rgb(18, 36, 14);
+            case 2  -> Color.rgb(14, 24, 55);
+            default -> Color.rgb(35, 20, 13);
+        };
     }
 
     // ── Geometry helpers ───────────────────────────────────────────────────

@@ -42,6 +42,20 @@ public class Enemy extends Entity {
     }
     // ▲▲▲ 修改結束 ▲▲▲
 
+    // ── Coin drop ──────────────────────────────────────────────────────────
+    private boolean coinDropped = false;
+
+    /** Whether coins have already been spawned for this enemy's death. */
+    public boolean hasCoinDropped() { return coinDropped; }
+    public void    markCoinDropped() { coinDropped = true; }
+
+    /**
+     * Number of coins (each worth 1) dropped when this enemy dies.
+     * Scales with maxHp so tougher enemies drop more.
+     * Override in Boss for a larger reward.
+     */
+    public int getCoinValue() { return 2 + maxHp / 20; }
+
     protected final List<Bullet> bullets = new ArrayList<>();
 
     // ── Status effect timers (applied by book effects) ─────────────────────

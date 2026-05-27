@@ -181,6 +181,7 @@ public class Player extends Entity {
             if (GameState.opMode)        speed *= 3.0;
             else if (slowTimer      > 0) speed *= SLOW_FACTOR;
             else if (speedBoostTimer > 0) speed *= speedBoostFactor;
+            speed *= GameState.speedMultiplier; // permanent boost from items
 
             if (keys.contains(KeyCode.W) || keys.contains(KeyCode.UP))    dy -= 1;
             if (keys.contains(KeyCode.S) || keys.contains(KeyCode.DOWN))  dy += 1;

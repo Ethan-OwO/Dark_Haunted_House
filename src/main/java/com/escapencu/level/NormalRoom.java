@@ -4,6 +4,7 @@ import com.escapencu.entity.Enemy;
 import com.escapencu.entity.enemy.Goose;
 import com.escapencu.entity.enemy.Squirrel;
 import com.escapencu.entity.enemy.Termite;
+import com.escapencu.util.FloorTileRenderer;
 import javafx.scene.canvas.GraphicsContext;
 import javafx.scene.paint.Color;
 
@@ -19,11 +20,11 @@ public class NormalRoom extends Room {
     private final int floorNum;
 
     // ── Obstacle constants ─────────────────────────────────────────────────
-    private static final double BLOCK       = 48.0;
-    private static final double WALL_MARGIN = 48.0;
+    private static final double BLOCK       = 32.0;   // matches FloorTileRenderer.TILE_DRAW_SIZE
+    private static final double WALL_MARGIN = 32.0;
     private static final double CORR_DEPTH  = 120.0;
     private static final double CORR_HALF   = DungeonFloor.CORRIDOR_THICK / 2.0 + 36.0;
-    private static final double OBS_GAP     = 48.0;
+    private static final double OBS_GAP     = 32.0;
     private static final int    MAX_SHAPES  = 4;
 
     /**
@@ -59,10 +60,14 @@ public class NormalRoom extends Room {
     /** Flat list of placed obstacle blocks: each double[] is {worldX, worldY, w, h}. */
     private final List<double[]> obstacleBlocks = new ArrayList<>();
 
+    /** Stable tile-index map generated once at construction (seeded by grid pos). */
+    private final int[][] floorTilemap;
+
     public NormalRoom(int gridX, int gridY, Type type, int stage, int floorNum) {
         super(gridX, gridY, type);
-        this.stage    = stage;
-        this.floorNum = floorNum;
+        this.stage        = stage;
+        this.floorNum     = floorNum;
+        this.floorTilemap = FloorTileRenderer.generateTilemap(gridX, gridY, worldW - WALL * 2, worldH - WALL * 2, stage);
     }
 
     // ── Obstacle init (called by MapGenerator after corridors are known) ───
@@ -219,16 +224,25 @@ public class NormalRoom extends Room {
 
     @Override
     protected void drawFloor(GraphicsContext gc) {
-        gc.setFill(floorColor());
+        // ── Wall area: solid color matched to the stage tile palette ──────────────
+        gc.setFill(wallColor());
         gc.fillRect(worldX, worldY, worldW, worldH);
 
-        // Subtle tile grid
-        gc.setStroke(tileLineColor());
-        gc.setLineWidth(1);
-        for (double x = worldX + WALL; x < worldX + worldW - WALL; x += 64)
-            gc.strokeLine(x, worldY + WALL, x, worldY + worldH - WALL);
-        for (double y = worldY + WALL; y < worldY + worldH - WALL; y += 64)
-            gc.strokeLine(worldX + WALL, y, worldX + worldW - WALL, y);
+        // ── Tiled floor texture (inner walkable area only) ────────────────────────
+        FloorTileRenderer.draw(gc, floorTilemap, stage, worldX + WALL, worldY + WALL);
+
+        // ── Stage 2: dampen the bright blue tiles ─────────────────────────────────
+        if (stage == 2) {
+            gc.setFill(Color.color(0.0, 0.02, 0.15, 0.32));
+            gc.fillRect(worldX + WALL, worldY + WALL, worldW - WALL * 2, worldH - WALL * 2);
+        }
+
+        // ── Inner edge: 3-px dark strip where wall meets floor ───────────────────
+        gc.setFill(wallEdgeColor());
+        gc.fillRect(worldX + WALL,                    worldY + WALL,                    worldW - WALL * 2, 3);
+        gc.fillRect(worldX + WALL,                    worldY + worldH - WALL - 3,       worldW - WALL * 2, 3);
+        gc.fillRect(worldX + WALL,                    worldY + WALL,                    3, worldH - WALL * 2);
+        gc.fillRect(worldX + worldW - WALL - 3,       worldY + WALL,                    3, worldH - WALL * 2);
 
         drawObstacles(gc);
 
@@ -236,13 +250,19 @@ public class NormalRoom extends Room {
         if (type == Type.REWARD) drawRewardLabel(gc);
     }
 
+    /** Solid wall colour — delegates to shared helper in Room. */
+    private Color wallColor()     { return stageWallColor(stage); }
+
+    /** Dark edge strip colour — delegates to shared helper in Room. */
+    private Color wallEdgeColor() { return stageWallEdgeColor(stage); }
+
     private void drawObstacles(GraphicsContext gc) {
         if (obstacleBlocks.isEmpty()) return;
 
         Color main      = obstacleMainColor();
         Color highlight = obstacleHighlightColor();
         Color shadow    = obstacleShadowColor();
-        double edge = 4.0;
+        double edge = 3.0;
 
         for (double[] b : obstacleBlocks) {
             double bx = b[0], by = b[1], bw = b[2], bh = b[3];
@@ -303,19 +323,4 @@ public class NormalRoom extends Room {
         gc.fillText("★ 獎勵房間 (TODO)", cx - 55, cy);
     }
 
-    private Color floorColor() {
-        return switch (stage) {
-            case 1  -> Color.rgb(50, 50, 68);
-            case 2  -> Color.rgb(40, 52, 40);
-            default -> Color.rgb(52, 40, 40);
-        };
-    }
-
-    private Color tileLineColor() {
-        return switch (stage) {
-            case 1  -> Color.rgb(40, 40, 58);
-            case 2  -> Color.rgb(32, 44, 32);
-            default -> Color.rgb(44, 32, 32);
-        };
-    }
 }
