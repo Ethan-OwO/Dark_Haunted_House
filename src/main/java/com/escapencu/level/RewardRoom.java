@@ -127,6 +127,7 @@ public class RewardRoom extends Room {
     public void buy(Player player, int index) {
         if (rewardType != RewardType.SHOP) return;
         if (index < 0 || index > 2)        return;
+        if (!nearCenter(player, 200))      { showDialog("請靠近商人！");                               return; }
         if (shopSold[index])               { showDialog("已售出！");                                   return; }
         if (GameState.score < shopPrices()[index]) {
             showDialog("分數不足！需要 " + shopPrices()[index] + " 分");                                return;
@@ -210,21 +211,11 @@ public class RewardRoom extends Room {
         if (dialogText != null) drawDialog(gc, cx, cy);
     }
 
-    private Color wallColor() {
-        return switch (stage) {
-            case 1  -> Color.rgb(35,  62,  30);
-            case 2  -> Color.rgb(28,  42,  82);
-            default -> Color.rgb(58,  36,  26);
-        };
-    }
+    /** Solid wall colour — delegates to shared helper in Room. */
+    private Color wallColor()     { return stageWallColor(stage); }
 
-    private Color wallEdgeColor() {
-        return switch (stage) {
-            case 1  -> Color.rgb(18, 36, 14);
-            case 2  -> Color.rgb(14, 24, 55);
-            default -> Color.rgb(35, 20, 13);
-        };
-    }
+    /** Dark edge strip colour — delegates to shared helper in Room. */
+    private Color wallEdgeColor() { return stageWallEdgeColor(stage); }
 
     private void drawPotion(GraphicsContext gc, double cx, double cy) {
         if (collected) return;

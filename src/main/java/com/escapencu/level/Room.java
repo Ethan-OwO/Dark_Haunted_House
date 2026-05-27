@@ -117,7 +117,7 @@ public abstract class Room {
 
     /** Scatter coins from a dead enemy — each coin is worth 1 point. */
     private void spawnCoins(Enemy en) {
-        int count = Math.min(en.getCoinValue(), 60); // cap at 60 per kill
+        int count = Math.min(en.getCoinValue(), 25); // cap at 25 per kill to limit object count
         for (int i = 0; i < count; i++)
             coins.add(new Coin(en.getCenterX(), en.getCenterY(), 1));
     }
@@ -262,6 +262,28 @@ public abstract class Room {
     private static boolean rectsOverlap(double ax, double ay, double aw, double ah,
                                          double bx, double by, double bw, double bh) {
         return ax < bx + bw && ax + aw > bx && ay < by + bh && ay + ah > by;
+    }
+
+    // ── Stage colour helpers (shared by NormalRoom / RewardRoom / BossRoom) ──
+    /**
+     * Solid wall colour that matches the stage tile palette.
+     * Pass the stage field of the calling room.
+     */
+    protected static Color stageWallColor(int stage) {
+        return switch (stage) {
+            case 1  -> Color.rgb(35,  62,  30);   // dark forest green  (Stage 1 — 工程五館)
+            case 2  -> Color.rgb(28,  42,  82);   // dark navy blue     (Stage 2 — 男13宿舍)
+            default -> Color.rgb(58,  36,  26);   // dark brick brown   (Stage 3 — 圖書館)
+        };
+    }
+
+    /** Dark edge strip colour between wall and tiled floor. */
+    protected static Color stageWallEdgeColor(int stage) {
+        return switch (stage) {
+            case 1  -> Color.rgb(18, 36, 14);
+            case 2  -> Color.rgb(14, 24, 55);
+            default -> Color.rgb(35, 20, 13);
+        };
     }
 
     // ── Geometry helpers ───────────────────────────────────────────────────

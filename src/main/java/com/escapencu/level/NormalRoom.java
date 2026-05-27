@@ -250,23 +250,11 @@ public class NormalRoom extends Room {
         if (type == Type.REWARD) drawRewardLabel(gc);
     }
 
-    /** Solid wall colour that matches the stage tile palette. */
-    private Color wallColor() {
-        return switch (stage) {
-            case 1  -> Color.rgb(35,  62,  30);   // dark forest green  (Stage 1 — 工程五館)
-            case 2  -> Color.rgb(28,  42,  82);   // dark navy blue     (Stage 2 — 男13宿舍)
-            default -> Color.rgb(58,  36,  26);   // dark brick brown   (Stage 3 — 圖書館)
-        };
-    }
+    /** Solid wall colour — delegates to shared helper in Room. */
+    private Color wallColor()     { return stageWallColor(stage); }
 
-    /** Dark edge line colour between wall and floor. */
-    private Color wallEdgeColor() {
-        return switch (stage) {
-            case 1  -> Color.rgb(18, 36, 14);
-            case 2  -> Color.rgb(14, 24, 55);
-            default -> Color.rgb(35, 20, 13);
-        };
-    }
+    /** Dark edge strip colour — delegates to shared helper in Room. */
+    private Color wallEdgeColor() { return stageWallEdgeColor(stage); }
 
     private void drawObstacles(GraphicsContext gc) {
         if (obstacleBlocks.isEmpty()) return;
