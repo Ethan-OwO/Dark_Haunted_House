@@ -218,16 +218,16 @@ public class GameScene {
     //pause控制介面
     private javafx.scene.layout.VBox buildPauseMenu() {
         javafx.scene.text.Text title = new javafx.scene.text.Text("遊戲暫停");
-        title.setFont(Font.font(52));
+        title.setFont(PIXEL_FONT_52 != null ? PIXEL_FONT_52 : Font.font(52));
         title.setFill(Color.WHITE);
 
         javafx.scene.control.Button resumeBtn = new javafx.scene.control.Button("繼續遊戲");
-        resumeBtn.setFont(Font.font(24));
+        resumeBtn.setFont(PIXEL_FONT_24 != null ? PIXEL_FONT_24 : Font.font(24));
         resumeBtn.setPrefWidth(220);
         resumeBtn.setOnAction(e -> togglePause());
 
         javafx.scene.control.Button controlsBtn = new javafx.scene.control.Button("操作說明");
-        controlsBtn.setFont(Font.font(24));
+        controlsBtn.setFont(PIXEL_FONT_24 != null ? PIXEL_FONT_24 : Font.font(24));
         controlsBtn.setPrefWidth(220);
         controlsBtn.setOnAction(e -> {
             pauseMenu.setVisible(false);     // 隱藏暫停選單
@@ -235,7 +235,7 @@ public class GameScene {
         });
 
         javafx.scene.control.Button menuBtn = new javafx.scene.control.Button("回主選單");
-        menuBtn.setFont(Font.font(24));
+        menuBtn.setFont(PIXEL_FONT_24 != null ? PIXEL_FONT_24 : Font.font(24));
         menuBtn.setPrefWidth(220);
         menuBtn.setOnAction(e -> {
             gameLoop.stop();
@@ -259,7 +259,7 @@ public class GameScene {
     private javafx.scene.layout.VBox buildControlsMenu() {
         // 標題
         javafx.scene.text.Text title = new javafx.scene.text.Text("操作說明");
-        title.setFont(Font.font(52));
+        title.setFont(PIXEL_FONT_52 != null ? PIXEL_FONT_52 : Font.font(52));
         title.setFill(Color.WHITE);
 
         // 鍵位內容 (使用 Text 支援多行，並設定置中)
@@ -276,13 +276,13 @@ public class GameScene {
         controlsText += "P : 暫停遊戲";
 
         javafx.scene.text.Text text = new javafx.scene.text.Text(controlsText);
-        text.setFont(Font.font(24));
+        text.setFont(PIXEL_FONT_24 != null ? PIXEL_FONT_24 : Font.font(24));
         text.setFill(Color.WHITE);
         text.setTextAlignment(javafx.scene.text.TextAlignment.CENTER);
 
         // 返回按鈕
         javafx.scene.control.Button backBtn = new javafx.scene.control.Button("返回");
-        backBtn.setFont(Font.font(24));
+        backBtn.setFont(PIXEL_FONT_24 != null ? PIXEL_FONT_24 : Font.font(24));
         backBtn.setPrefWidth(220);
         backBtn.setOnAction(e -> {
             controlsMenu.setVisible(false); // 隱藏操作說明
@@ -922,7 +922,7 @@ public class GameScene {
         }
         if (GameState.selectedTalent == GameState.Talent.LEBRON) {
             boolean used = GameState.talentUsedThisStage;
-            gc.setFont(Font.font(14));
+            gc.setFont(PIXEL_FONT_14 != null ? PIXEL_FONT_14 : Font.font(14));
             gc.setFill(used ? Color.GRAY : Color.web("#FDB927"));
             gc.fillText(used ? "LeBron [Q] ——" : "LeBron [Q] 就緒", 10, GameApp.HEIGHT - 15);
         }
@@ -960,7 +960,7 @@ public class GameScene {
 
         // 4. 畫文字提示
         gc.setFill(Color.WHITE);
-        gc.setFont(Font.font(14));
+        gc.setFont(PIXEL_FONT_14 != null ? PIXEL_FONT_14 : Font.font(14));
         String staminaText = (staminaRatio >= 1.0) ? "衝刺 READY [SPACE]" : "體力回復中...";
         // 把文字畫在體力條的上方
         gc.fillText(staminaText, staminaBarX, staminaBarY - 8);
@@ -988,7 +988,7 @@ public class GameScene {
             gc.fillText(text, textX, textY);
 
             gc.setGlobalAlpha(1.0);
-            gc.setFont(Font.font(14)); // restore default font
+            gc.setFont(PIXEL_FONT_14 != null ? PIXEL_FONT_14 : Font.font(14)); // restore default font
         }
     }
 
