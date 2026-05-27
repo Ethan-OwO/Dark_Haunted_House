@@ -21,6 +21,9 @@ public class GameState {
     /** Persistent damage multiplier — stacks across floors within a run. */
     public static double damageMultiplier = 1.0;
 
+    /** Persistent speed multiplier — stacks across floors within a run. */
+    public static double speedMultiplier  = 1.0;
+
     public enum Talent {
         NONE, LEBRON
     }
@@ -53,6 +56,7 @@ public class GameState {
         devMode = false;
         opMode = false;
         damageMultiplier = 1.0;
+        speedMultiplier  = 1.0;
         bookEffects.clear();
         talentUsedThisStage = false;
     }

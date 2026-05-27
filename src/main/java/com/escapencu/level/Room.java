@@ -1,6 +1,7 @@
 package com.escapencu.level;
 
 import com.escapencu.entity.Bullet;
+import com.escapencu.entity.Coin;
 import com.escapencu.entity.Enemy;
 import com.escapencu.entity.Entity;
 import com.escapencu.entity.Player;
@@ -36,6 +37,7 @@ public abstract class Room {
     private final boolean[] hasCorridor = new boolean[4];
 
     protected final List<Entity> enemies = new ArrayList<>();
+    protected final List<Coin>   coins   = new ArrayList<>();
 
     // ── Constructor ────────────────────────────────────────────────────────
     protected Room(int gridX, int gridY, Type type) {
@@ -67,6 +69,13 @@ public abstract class Room {
             if (e instanceof Enemy en) pending.addAll(en.getPendingSpawns());
         enemies.addAll(pending);
 
+        // Spawn coins for newly-dead enemies (checked before removal)
+        for (Entity e : enemies) {
+            if (!e.isAlive() && e instanceof Enemy en && !en.hasCoinDropped()) {
+                en.markCoinDropped();
+                spawnCoins(en);
+            }
+        }
         enemies.removeIf(e -> !e.isAlive());
 
         // Build live-enemy list for steering separation (one allocation per frame)
@@ -93,6 +102,24 @@ public abstract class Room {
         if (!cleared && enemies.stream().noneMatch(e -> e.isAlive() && e.countsForRoomClear())) {
             cleared = true;
         }
+
+        // Update and collect coins — clamp each coin to inner room bounds
+        coins.removeIf(Coin::isCollected);
+        double innerMinX = worldX + WALL + 4;
+        double innerMinY = worldY + WALL + 4;
+        double innerMaxX = worldX + worldW - WALL - 4;
+        double innerMaxY = worldY + worldH - WALL - 4;
+        for (Coin c : coins) {
+            c.update(deltaTime, player);
+            c.clampToBounds(innerMinX, innerMinY, innerMaxX, innerMaxY);
+        }
+    }
+
+    /** Scatter coins from a dead enemy — each coin is worth 1 point. */
+    private void spawnCoins(Enemy en) {
+        int count = Math.min(en.getCoinValue(), 60); // cap at 60 per kill
+        for (int i = 0; i < count; i++)
+            coins.add(new Coin(en.getCenterX(), en.getCenterY(), 1));
     }
 
     // ── Draw (world coordinates) ───────────────────────────────────────────
@@ -109,6 +136,9 @@ public abstract class Room {
             }
         }
         // ▲▲▲ 修改結束 ▲▲▲
+
+        // ── Dropped coins (drawn on top of floor, below player) ───────────
+        for (Coin c : coins) c.draw(gc);
     }
 
     /** Subclass draws the floor/background of the room. */

@@ -21,6 +21,10 @@ public abstract class Boss extends Enemy {
         if (!invincible) super.takeDamage(damage);
     }
 
+    /** Bosses drop significantly more coins than normal enemies. */
+    @Override
+    public int getCoinValue() { return 40 + maxHp / 6; }
+
     protected void updatePhase() {
         if (phase == 1 && hp <= maxHp / 2) phase = 2;
     }

@@ -77,7 +77,7 @@ public class MapGenerator {
         for (int i = 0; i < rewards; i++) {
             int[] pos = leaves.remove(rand.nextInt(leaves.size()));
             replaceRoom(pos[0], pos[1],
-                new RewardRoom(pos[0], pos[1], randomRewardType()));
+                new RewardRoom(pos[0], pos[1], randomRewardType(), stage));
         }
 
         // ── Step 6: corridor flags ────────────────────────────────────────
@@ -256,8 +256,7 @@ public class MapGenerator {
         return switch (rand.nextInt(10)) {
             case 0, 1, 2, 3 -> RewardType.POTION;
             case 4, 5, 6    -> RewardType.CHEST;
-            case 7, 8       -> RewardType.NPC;
-            default         -> RewardType.SHOP;
+            default         -> RewardType.SHOP;   // 7,8,9 → shop
         };
     }
 

@@ -49,9 +49,11 @@ public class GameScene {
     private Room            currentRoom;
     private GameLoop        gameLoop;
 
-    private LeBronSkill            lebronSkill = null;
-    private final List<FirePatch>  firePatches = new ArrayList<>();
-    private StackPane              rootPane    = null;
+    private LeBronSkill            lebronSkill    = null;
+    private final List<FirePatch>  firePatches    = new ArrayList<>();
+    private StackPane              rootPane       = null;
+    /** Dev-only: a SHOP RewardRoom overlaid on top of the current room. */
+    private RewardRoom             devRewardOverlay = null;
     // ── Pause variables ──────────────────────────────────────────────────────
     private boolean isPaused = false;
     private javafx.scene.layout.VBox pauseMenu;
@@ -76,10 +78,20 @@ public class GameScene {
     // ── Room-clear banner ──────────────────────────────────────────────────
     private static final Font PIXEL_FONT_LARGE = Font.loadFont(
             GameScene.class.getResourceAsStream("/fonts/Cubic_11.ttf"), 52);
+    private static final Font PIXEL_FONT_HUD   = Font.loadFont(
+            GameScene.class.getResourceAsStream("/fonts/Cubic_11.ttf"), 18);
     private static final double CLEAR_BANNER_DURATION = 2.2; // seconds to show
     private double  clearBannerTimer    = 0;
     private boolean prevRoomCleared     = false;  // cleared state last frame
     private Room    prevTrackedRoom     = null;   // detects room changes
+
+    // ── HUD coin animation ─────────────────────────────────────────────────
+    private static final javafx.scene.image.Image HUD_COIN_SHEET =
+            com.escapencu.util.ResourceLoader.getImage("/images/2D Chests & Coins/Coin.png", false);
+    private static final int    HUD_COIN_FRAMES   = 6;
+    private static final double HUD_COIN_FRAME_DUR = 0.10;
+    private double hudCoinTimer = 0;
+    private int    hudCoinFrame = 0;
 
     /** Trigger a camera shake. intensity = max pixel offset. */
     private void triggerShake(double duration, double intensity) {
@@ -90,7 +102,7 @@ public class GameScene {
 
     // ── Tab-completion data (update when new commands / entities are added) ──
     /** All available slash-commands. */
-    private static final List<String> CMD_LIST = List.of("/help", "/summon");
+    private static final List<String> CMD_LIST = List.of("/help", "/summon", "/shop", "/closeshop", "/chest");
 
     /**
      * Summonable entity names — both English and Chinese so players can
@@ -309,7 +321,8 @@ public class GameScene {
             GameState.currentStage = newStage;
         }
         firePatches.clear();
-        lebronSkill = null;
+        lebronSkill    = null;
+        devRewardOverlay = null;
     }
 
     // ── Camera helper ──────────────────────────────────────────────────────
@@ -365,6 +378,14 @@ public class GameScene {
         if (isPaused) return;//如果是暫停狀態，跳過所有邏輯更新
 
         console.update(deltaTime);
+
+        // HUD coin spin animation (runs even while console is open)
+        hudCoinTimer += deltaTime;
+        if (hudCoinTimer >= HUD_COIN_FRAME_DUR) {
+            hudCoinTimer -= HUD_COIN_FRAME_DUR;
+            hudCoinFrame = (hudCoinFrame + 1) % HUD_COIN_FRAMES;
+        }
+
         if (console.isOpen()) return; // 打指令時凍結遊戲
 
         // Dev mode: N key → skip to next floor
@@ -455,6 +476,7 @@ public class GameScene {
         // ▲▲▲ 修改結束 ▲▲▲
 
         dungeon.update(deltaTime, player);
+        if (devRewardOverlay != null) devRewardOverlay.update(deltaTime, player);
 
         // ── Room-clear banner trigger ─────────────────────────────────────
         if (currentRoom != prevTrackedRoom) {
@@ -516,6 +538,8 @@ public class GameScene {
         gc.save();
         gc.translate(-camX() + shakeX, -camY() + shakeY);
         dungeon.draw(gc);
+        // Dev shop overlay (drawn over current room floor but under player)
+        if (devRewardOverlay != null) devRewardOverlay.draw(gc);
         // 火焰（地板層，在玩家下方）
         for (FirePatch f : firePatches) f.draw(gc);
         // LeBron 技能動畫
@@ -531,11 +555,14 @@ public class GameScene {
 
     // ── Reward room interaction ────────────────────────────────────────────
     private void handleRewardInteract() {
+        if (devRewardOverlay != null) { devRewardOverlay.onInteract(player); return; }
         if (currentRoom instanceof RewardRoom rr) rr.onInteract(player);
     }
 
+    /** 1 / 2 / 3 keys — buy from shop (dev overlay or real reward room). */
     private void handleShopBuy(int index) {
-        if (currentRoom instanceof RewardRoom rr) rr.onShopBuy(player, index);
+        if (devRewardOverlay != null) { devRewardOverlay.buy(player, index); return; }
+        if (currentRoom instanceof RewardRoom rr) rr.buy(player, index);
     }
 
     // ── Tab completion ─────────────────────────────────────────────────────
@@ -611,9 +638,12 @@ public class GameScene {
 
         String[] parts = cmd.substring(1).trim().split("\\s+");
         switch (parts[0].toLowerCase()) {
-            case "help"   -> execHelp();
-            case "summon" -> execSummon(parts);
-            default       -> console.showOutput("❌ 未知指令：/" + parts[0] + "\n輸入 /help 查看所有指令");
+            case "help"      -> execHelp();
+            case "summon"    -> execSummon(parts);
+            case "shop"      -> execShop();
+            case "chest"     -> execChest();
+            case "closeshop" -> execCloseReward();
+            default          -> console.showOutput("❌ 未知指令：/" + parts[0] + "\n輸入 /help 查看所有指令");
         }
     }
 
@@ -624,7 +654,10 @@ public class GameScene {
                 /summon <名稱>     在玩家旁召喚實體
                   可召喚：squirrel 松鼠、goose 鵝、termite 白蟻
                           wuxiaoguang 無小光、chenqinhan 沉沁汗
-                          shiguozhen 濕幗針""", 6.0);
+                          shiguozhen 濕幗針
+                /shop              在當前房間疊加商店（按 1/2/3 購買）
+                /chest             在當前房間疊加寶箱（按 E 開啟）
+                /closeshop         關閉疊加商店 / 寶箱""", 7.5);
     }
 
     private void execSummon(String[] parts) {
@@ -666,6 +699,41 @@ public class GameScene {
         }
         currentRoom.getEnemies().add(entity);
         console.showOutput("✔ 已召喚：" + parts[1]);
+    }
+
+    // ── Dev shop overlay ───────────────────────────────────────────────────
+
+    /**
+     * Overlays a SHOP RewardRoom on top of the current room in world space.
+     * The overlay shares the exact same worldX/worldY as the current room
+     * (constructed with the same gridX/gridY), so the tables and merchant
+     * appear at the room centre as if a real shop room had been generated there.
+     *
+     * The overlay is drawn after dungeon.draw(), E-key interactions are routed
+     * to it first, and it is cleared automatically when advancing floors.
+     */
+    private void execShop() {
+        if (currentRoom == null) { console.showOutput("❌ 目前沒有房間"); return; }
+        devRewardOverlay = new RewardRoom(
+                currentRoom.gridX, currentRoom.gridY, RewardRoom.RewardType.SHOP,
+                GameState.currentStage);
+        devRewardOverlay.activate();
+        console.showOutput("✔ 商店已疊加於當前房間\n按 1/2/3 購買，/closeshop 關閉");
+    }
+
+    private void execChest() {
+        if (currentRoom == null) { console.showOutput("❌ 目前沒有房間"); return; }
+        devRewardOverlay = new RewardRoom(
+                currentRoom.gridX, currentRoom.gridY, RewardRoom.RewardType.CHEST,
+                GameState.currentStage);
+        devRewardOverlay.activate();
+        console.showOutput("✔ 寶箱已疊加於當前房間\n按 E 開啟，/closeshop 關閉");
+    }
+
+    private void execCloseReward() {
+        if (devRewardOverlay == null) { console.showOutput("目前沒有開啟疊加物件"); return; }
+        devRewardOverlay = null;
+        console.showOutput("✔ 已關閉");
     }
 
     // ── Floor advancement ──────────────────────────────────────────────────
@@ -797,7 +865,22 @@ public class GameScene {
         gc.setFill(Color.WHITE);
         gc.fillText("Stage " + levelManager.getStage() + "  " + floorLabel,
                 GameApp.WIDTH / 2.0 - 60, 25);
-        gc.fillText("分數: " + GameState.score, GameApp.WIDTH - 170.0, 25);//原x值:120
+        // ── Score: coin icon + number, below HP bar (top-left) ────────────
+        double coinSz = 56;
+        double coinX  = 10;
+        double coinY  = 35;   // just below the HP bar (bar ends at y=30)
+        if (HUD_COIN_SHEET != null) {
+            double fw = HUD_COIN_SHEET.getWidth() / HUD_COIN_FRAMES;
+            double fh = HUD_COIN_SHEET.getHeight();
+            gc.drawImage(HUD_COIN_SHEET,
+                    hudCoinFrame * fw, 0, fw, fh,
+                    coinX, coinY, coinSz, coinSz);
+        }
+        Font prevFont = gc.getFont();
+        gc.setFont(PIXEL_FONT_HUD != null ? PIXEL_FONT_HUD : prevFont);
+        gc.setFill(Color.GOLD);
+        gc.fillText(String.valueOf(GameState.score), coinX + coinSz + 6, coinY + coinSz / 2.0 + 6);
+        gc.setFont(prevFont);
 
         // Dev / OP tags
         if (GameState.devMode) {
