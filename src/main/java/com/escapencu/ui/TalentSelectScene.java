@@ -28,6 +28,8 @@ public class TalentSelectScene {
 
     private GameState.Talent chosen = GameState.Talent.NONE;
 
+    private LeBronPreview lebronPreview = null;
+
     public Scene build() {
         Text title = new Text("選擇天賦");
         title.setFont(pf(44));
@@ -68,6 +70,11 @@ public class TalentSelectScene {
         confirmBtn.setFont(pf(24));
         confirmBtn.setPrefWidth(220);
         confirmBtn.setOnAction(e -> {
+            // 先停掉預覽動畫，避免 AnimationTimer 在場景切換後繼續跑
+            if (lebronPreview != null) {
+                lebronPreview.stop();
+                lebronPreview = null;
+            }
             GameState.selectedTalent      = chosen;
             GameState.talentUsedThisStage = false;
             SceneManager.showGame();
@@ -81,8 +88,9 @@ public class TalentSelectScene {
     }
 
     private StackPane buildLeBronCard() {
-        LeBronPreview preview = new LeBronPreview(120, 180);
-        preview.start();
+        lebronPreview = new LeBronPreview(120, 180);
+        lebronPreview.start();
+        LeBronPreview preview = lebronPreview;
 
         Text name = new Text("LeBron 夥伴");
         name.setFont(pf(15));

@@ -80,6 +80,12 @@ public class GameScene {
             GameScene.class.getResourceAsStream("/fonts/Cubic_11.ttf"), 52);
     private static final Font PIXEL_FONT_HUD   = Font.loadFont(
             GameScene.class.getResourceAsStream("/fonts/Cubic_11.ttf"), 18);
+    private static final Font PIXEL_FONT_52    = Font.loadFont(
+            GameScene.class.getResourceAsStream("/fonts/Cubic_11.ttf"), 52);
+    private static final Font PIXEL_FONT_24    = Font.loadFont(
+            GameScene.class.getResourceAsStream("/fonts/Cubic_11.ttf"), 24);
+    private static final Font PIXEL_FONT_14    = Font.loadFont(
+            GameScene.class.getResourceAsStream("/fonts/Cubic_11.ttf"), 14);
     private static final double CLEAR_BANNER_DURATION = 2.2; // seconds to show
     private double  clearBannerTimer    = 0;
     private boolean prevRoomCleared     = false;  // cleared state last frame
