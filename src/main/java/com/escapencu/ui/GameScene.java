@@ -660,6 +660,8 @@ public class GameScene {
         if (currentRoom == null) return;
 
         List<Entity> enemies = currentRoom.getEnemies();
+        // 玩家目前所在的房間（走廊中為 null）
+        Room playerRoom = dungeon.getRoomAt(player.getCenterX(), player.getCenterY());
 
         for (Bullet b : player.getBullets()) {
             if (!b.isAlive()) continue;
@@ -672,6 +674,15 @@ public class GameScene {
             if (hitWall) {
                 b.hit();  // 呼叫 hit() 讓子彈失效/播放消失動畫
                 continue; // 既然已經撞牆，就不需要再檢查有沒有打到敵人了，直接換下一顆子彈
+            }
+
+            // 子彈進入「玩家不在其中」的未通關戰鬥房間 → 視為撞牆消失
+            Room bulletRoom = dungeon.getRoomAt(b.getCenterX(), b.getCenterY());
+            if (bulletRoom != null && bulletRoom != playerRoom
+                    && !bulletRoom.isCleared()
+                    && (bulletRoom.type == Room.Type.NORMAL || bulletRoom.type == Room.Type.BOSS)) {
+                b.hit();
+                continue;
             }
 
             for (Entity e : enemies) {
