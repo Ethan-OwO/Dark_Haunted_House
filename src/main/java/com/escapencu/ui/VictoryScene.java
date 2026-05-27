@@ -12,21 +12,28 @@ import javafx.scene.text.Font;
 import javafx.scene.text.Text;
 
 public class VictoryScene {
+
+    // 載入支援中文的像素字型（Windows 也適用，只是換了字型外觀）
+    private static Font pf(double size) {
+        Font f = Font.loadFont(VictoryScene.class.getResourceAsStream("/fonts/Cubic_11.ttf"), size);
+        return f != null ? f : Font.font(size);
+    }
+
     public Scene build() {
         Text title = new Text("恭喜畢業！");
-        title.setFont(Font.font(52));
+        title.setFont(pf(52));
         title.setFill(Color.GOLD);
 
         Text msg = new Text("你成功逃離中央大學！");
-        msg.setFont(Font.font(28));
+        msg.setFont(pf(28));
         msg.setFill(Color.WHITE);
 
         Text score = new Text("最終分數：" + GameState.score);
-        score.setFont(Font.font(22));
+        score.setFont(pf(22));
         score.setFill(Color.LIGHTGRAY);
 
         Button menuBtn = new Button("回主選單");
-        menuBtn.setFont(Font.font(20));
+        menuBtn.setFont(pf(20));
         menuBtn.setPrefWidth(220);
         menuBtn.setOnAction(e -> SceneManager.showMainMenu());
 
