@@ -48,6 +48,7 @@ public class GameScene {
     private DungeonFloor    dungeon;
     private Room            currentRoom;
     private GameLoop        gameLoop;
+    private boolean         showPortalPrompt = false;
 
     private LeBronSkill            lebronSkill    = null;
     private final List<FirePatch>  firePatches    = new ArrayList<>();
@@ -95,6 +96,8 @@ public class GameScene {
     private static final javafx.scene.image.Image HUD_COIN_SHEET =
             com.escapencu.util.ResourceLoader.getImage("/images/2D Chests & Coins/Coin.png", false);
     private static final int    HUD_COIN_FRAMES   = 6;
+    private static final javafx.scene.image.Image IMG_PORTAL =
+            com.escapencu.util.ResourceLoader.getImage("/images/trasmit_door.png");
     private static final double HUD_COIN_FRAME_DUR = 0.10;
     private double hudCoinTimer = 0;
     private int    hudCoinFrame = 0;
@@ -513,6 +516,7 @@ public class GameScene {
         }
 
         // Portal: EXIT always has one; BOSS only after cleared
+        showPortalPrompt = false; // 每影格預設重設為 false
         if (currentRoom != null) {
             boolean hasPortal = currentRoom.type == Room.Type.EXIT
                     || (currentRoom.type == Room.Type.BOSS && currentRoom.isCleared());
@@ -520,8 +524,7 @@ public class GameScene {
                 double cx = currentRoom.worldX + currentRoom.worldW / 2.0;
                 double cy = currentRoom.worldY + currentRoom.worldH / 2.0;
                 if (Math.hypot(player.getCenterX() - cx, player.getCenterY() - cy) < 50) {
-                    advanceFloor();
-                    return;
+                    showPortalPrompt = true; // 玩家站在傳送門範圍內
                 }
             }
         }
@@ -548,6 +551,28 @@ public class GameScene {
         if (devRewardOverlay != null) devRewardOverlay.draw(gc);
         // 火焰（地板層，在玩家下方）
         for (FirePatch f : firePatches) f.draw(gc);
+        //傳送門
+        if (currentRoom != null) {
+            // 判定條件：EXIT 房、或是通關後的 BOSS 房
+            boolean hasPortal = currentRoom.type == Room.Type.EXIT
+                    || (currentRoom.type == Room.Type.BOSS && currentRoom.isCleared());
+            if (hasPortal && IMG_PORTAL != null) {
+                double cx = currentRoom.worldX + currentRoom.worldW / 2.0;
+                double cy = currentRoom.worldY + currentRoom.worldH / 2.0;
+
+                // 💡 解決方法：讀取原始圖片寬高並等比例放大，您可以自由調整後方的倍數（如 1.5, 2.0 等）
+                double pWidth = IMG_PORTAL.getWidth() *0.55;  // 放大 2.0 倍寬
+                double pHeight = IMG_PORTAL.getHeight() *0.55; // 放大 2.0 倍高，確保不失真
+
+                /* 備用方案：如果您想手動指定精確的像素大小（例如寬 96、高 128），也可以取消下方兩行的註解：
+                double pWidth = 96;
+                double pHeight = 128;
+                */
+
+                // 扣除寬高的一半，讓新傳送門的中心點完美對齊房間正中央
+                gc.drawImage(IMG_PORTAL, cx - pWidth / 2.0, cy - pHeight / 2.0, pWidth, pHeight);
+            }
+        }
         // LeBron 技能動畫
         if (lebronSkill != null) lebronSkill.draw(gc);
         for (Bullet b : player.getBullets()) b.draw(gc);
@@ -561,6 +586,10 @@ public class GameScene {
 
     // ── Reward room interaction ────────────────────────────────────────────
     private void handleRewardInteract() {
+        if (showPortalPrompt) {
+            advanceFloor();
+            return;
+        }
         if (devRewardOverlay != null) { devRewardOverlay.onInteract(player); return; }
         if (currentRoom instanceof RewardRoom rr) rr.onInteract(player);
     }
@@ -995,6 +1024,25 @@ public class GameScene {
 
             gc.setGlobalAlpha(1.0);
             gc.setFont(PIXEL_FONT_14 != null ? PIXEL_FONT_14 : Font.font(14)); // restore default font
+        }
+        if (showPortalPrompt) {
+            Font portalFontBackup = gc.getFont();
+            gc.setFont(PIXEL_FONT_24 != null ? PIXEL_FONT_24 : portalFontBackup);
+
+            String promptText = "是否前往下一層樓？ (按 [E] 鍵確認傳送)";
+            double textX = GameApp.WIDTH / 2.0 - 240; // 置中水平位置調整
+            double textY = GameApp.HEIGHT - 120;     // 顯示在畫面中下方
+
+            // 1. 繪製半透明黑色背景襯底，避免背景磚塊顏色干擾閱讀
+            gc.setFill(Color.color(0, 0, 0, 0.65));
+            gc.fillRect(textX - 20, textY - 26, 520, 38);
+
+            // 2. 繪製金色文字提示
+            gc.getStroke();
+            gc.setFill(Color.GOLD);
+            gc.fillText(promptText, textX, textY);
+
+            gc.setFont(portalFontBackup); // 還原原先的字型設定
         }
     }
 

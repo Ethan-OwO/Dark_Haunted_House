@@ -103,7 +103,7 @@ public class BossRoom extends Room {
         gc.setFill(Color.rgb(200, 40, 40));
         gc.fillText("★ BOSS  Stage " + stage + " — " + bossName, worldX + 30, worldY + 50);
 
-        if (isCleared()) drawPortal(gc);
+
     }
 
     /**
