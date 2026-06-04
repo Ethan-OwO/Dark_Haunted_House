@@ -73,6 +73,14 @@ public class SceneManager {
         transT.setY((h - GameApp.HEIGHT * s) / 2.0);
     }
 
+    public static void pauseBgm() {
+        if (bgmPlayer != null) bgmPlayer.pause();
+    }
+
+    public static void resumeBgm() {
+        if (bgmPlayer != null) bgmPlayer.play();
+    }
+
     private static void stopBgm() {
         if (bgmPlayer != null) {
             bgmPlayer.stop();
