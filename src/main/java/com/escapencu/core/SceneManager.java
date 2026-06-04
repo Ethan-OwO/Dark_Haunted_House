@@ -10,6 +10,8 @@ import javafx.scene.Group;
 import javafx.scene.Node;
 import javafx.scene.Scene;
 import javafx.scene.layout.Pane;
+import javafx.scene.media.Media;
+import javafx.scene.media.MediaPlayer;
 import javafx.scene.paint.Color;
 import javafx.scene.transform.Scale;
 import javafx.scene.transform.Translate;
@@ -21,6 +23,7 @@ public class SceneManager {
     private static Group  content;   // 永遠不換，放遊戲內容
     private static Scale     scaleT;
     private static Translate transT;
+    private static MediaPlayer bgmPlayer;
 
     public static void init(Stage primaryStage) {
         stage = primaryStage;
@@ -70,7 +73,29 @@ public class SceneManager {
         transT.setY((h - GameApp.HEIGHT * s) / 2.0);
     }
 
+    private static void stopBgm() {
+        if (bgmPlayer != null) {
+            bgmPlayer.stop();
+            bgmPlayer.dispose();
+            bgmPlayer = null;
+        }
+    }
+
+    private static void startBgm() {
+        stopBgm();
+        try {
+            var url = SceneManager.class.getResource("/music/bgmusic.mp3");
+            if (url != null) {
+                bgmPlayer = new MediaPlayer(new Media(url.toExternalForm()));
+                bgmPlayer.setCycleCount(MediaPlayer.INDEFINITE);
+                bgmPlayer.setVolume(0.5);
+                bgmPlayer.play();
+            }
+        } catch (Exception ignored) {}
+    }
+
     public static void showMainMenu() {
+        stopBgm();
         setContent(new MainMenuScene().build());
     }
 
@@ -80,14 +105,17 @@ public class SceneManager {
 
     public static void showGame() {
         GameState.reset();
+        startBgm();
         setContent(new GameScene().build());
     }
 
     public static void showGameOver() {
+        stopBgm();
         setContent(new GameOverScene().build());
     }
 
     public static void showVictory() {
+        stopBgm();
         setContent(new VictoryScene().build());
     }
 }

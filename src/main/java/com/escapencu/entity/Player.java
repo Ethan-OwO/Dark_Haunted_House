@@ -128,9 +128,21 @@ public class Player extends Entity {
     @Override
     public void takeDamage(int damage) {
         if (dashTimer > 0) return;
+        if (GameState.guanZhangInvincibleTimer > 0) return;
 
         super.takeDamage(damage);
-        if (!isAlive() && !dying) dying = true;
+        if (!isAlive() && !dying) {
+            if (GameState.selectedTalent == GameState.Talent.GUAN_ZHANG && !GameState.guanZhangUsed) {
+                // 館長被動：回 50 HP，觸發 5 秒無敵
+                hp = Math.min(50, maxHp);
+                alive = true; // Entity.takeDamage() set this to false — undo it
+                GameState.playerHp = hp;
+                GameState.guanZhangInvincibleTimer = 5.0;
+                GameState.guanZhangUsed = true;
+            } else {
+                dying = true;
+            }
+        }
     }
 
     private void updateDirection() {
@@ -252,11 +264,51 @@ public class Player extends Entity {
         if (slowTimer   > 0) { gc.setFill(Color.LIGHTBLUE); gc.fillText("緩", x + 32, y - 5); }
 
         if (dashTimer > 0) {
-            // 衝刺時畫一個半透明的淺藍色光圈或是調整整體透明度
             gc.setGlobalAlpha(0.6);
         } else if (stunTimer > 0) {
             gc.setGlobalAlpha(0.55);
         }
+        gc.setGlobalAlpha(1.0);
+
+        if (GameState.guanZhangInvincibleTimer > 0) {
+            drawGuanZhangShields(gc);
+        }
+    }
+
+    private double shieldAngle = 0;
+
+    public void tickShields(double dt) {
+        shieldAngle += dt * 2.2;
+    }
+
+    private void drawGuanZhangShields(GraphicsContext gc) {
+        double cx = getCenterX(), cy = getCenterY();
+        int count = 6;
+        double orbitR = 42;
+        // pulse intensity based on remaining time
+        double pulse = 0.7 + 0.3 * Math.sin(shieldAngle * 3.5);
+
+        for (int i = 0; i < count; i++) {
+            double angle = shieldAngle + i * (Math.PI * 2 / count);
+            double sx = cx + Math.cos(angle) * orbitR;
+            double sy = cy + Math.sin(angle) * orbitR * 0.6;
+            gc.setGlobalAlpha(pulse);
+            gc.setFill(Color.web("#FFD700"));
+            double[] px = {sx, sx - 6, sx - 6, sx, sx + 6, sx + 6};
+            double[] py = {sy - 9, sy - 4, sy + 3, sy + 9, sy + 3, sy - 4};
+            gc.fillPolygon(px, py, 6);
+            gc.setFill(Color.web("#8B6914"));
+            gc.fillRect(sx - 2, sy - 2, 4, 1);
+            gc.fillRect(sx - 1.5, sy, 3, 4);
+            gc.setGlobalAlpha(1.0);
+        }
+
+        // 金色光圈
+        double ringPulse = 0.25 + 0.15 * Math.sin(shieldAngle * 4);
+        gc.setStroke(Color.web("#FFD700", ringPulse));
+        gc.setLineWidth(2.5);
+        gc.strokeOval(cx - orbitR - 4, cy - (orbitR + 4) * 0.6, (orbitR + 4) * 2, (orbitR + 4) * 1.2);
+        gc.setLineWidth(1);
     }
 
     private Image pickFrame() {
