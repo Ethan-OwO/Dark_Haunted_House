@@ -49,22 +49,24 @@ jobs:
             --no-header-files `
             --compress=2
 
-      - name: Package exe with jpackage
+      - name: Package app-image with jpackage
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path dist
           jpackage `
-            --type exe `
+            --type app-image `
             --name "逃離中央大學" `
             --app-version "1.0.0" `
             --runtime-image runtime `
             --input target `
             --main-jar escape-ncu-1.0-SNAPSHOT.jar `
             --main-class com.escapencu.Main `
-            --dest dist `
-            --vendor "NCU Team" `
-            --win-dir-chooser `
-            --win-shortcut
+            --dest dist
+
+      - name: Zip app-image for release
+        shell: pwsh
+        run: |
+          Compress-Archive -Path "dist\逃離中央大學" -DestinationPath "dist\逃離中央大學-v1.0-windows.zip"
 
       - name: Upload to GitHub Releases
         uses: softprops/action-gh-release@v2
@@ -72,11 +74,11 @@ jobs:
           name: "逃離中央大學 ${{ github.ref_name }}"
           body: |
             ## 下載說明
-            1. 下載下方的 `.exe` 安裝檔
-            2. 雙擊安裝，不需要另外安裝 Java
-            3. 從開始選單或桌面捷徑啟動遊戲
+            1. 下載 `逃離中央大學-v1.0-windows.zip`
+            2. 解壓縮到任意資料夾
+            3. 雙擊資料夾內的 `逃離中央大學.exe` 即可遊玩（不需安裝 Java）
 
             如出現 Windows Defender 警告：點「更多資訊」→「仍要執行」
-          files: dist/*.exe
+          files: dist/*.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
