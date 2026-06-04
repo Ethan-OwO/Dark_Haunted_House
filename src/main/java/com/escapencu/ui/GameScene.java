@@ -15,6 +15,8 @@ import com.escapencu.entity.Player;
 import com.escapencu.guanzhang.GuanZhangUltimate;
 import com.escapencu.lebron.LeBronUltimate;
 import javafx.scene.media.AudioClip;
+import javafx.scene.media.Media;
+import javafx.scene.media.MediaPlayer;
 import com.escapencu.entity.boss.ChenQinHan;
 import com.escapencu.entity.boss.ShiGuoZhen;
 import com.escapencu.entity.boss.WuXiaoGuang;
@@ -56,7 +58,8 @@ public class GameScene {
     private final List<FirePatch>  firePatches    = new ArrayList<>();
     private StackPane              rootPane       = null;
     private boolean                guanZhangCutscenePlayed = false;
-    private AudioClip              activeSkillClip = null; // prevent GC from stopping mid-play
+    private AudioClip              activeSkillClip = null;
+    private MediaPlayer            lebronMusicPlayer = null;
     /** Dev-only: a SHOP RewardRoom overlaid on top of the current room. */
     private RewardRoom             devRewardOverlay = null;
     // ── Pause variables ──────────────────────────────────────────────────────
@@ -198,12 +201,16 @@ public class GameScene {
                     LeBronUltimate ult = new LeBronUltimate(GameApp.WIDTH, GameApp.HEIGHT);
                     rootPane.getChildren().add(ult);
                     try {
-                        var url = getClass().getResource("/music/Video Project.mp3");
+                        var url = getClass().getResource("/music/lebron.mp3");
                         if (url != null) {
-                            AudioClip clip = new AudioClip(url.toExternalForm().replace(" ", "%20"));
-                            clip.play();
+                            if (lebronMusicPlayer != null) lebronMusicPlayer.stop();
+                            SceneManager.pauseBgm();
+                            lebronMusicPlayer = new MediaPlayer(new Media(url.toExternalForm()));
+                            lebronMusicPlayer.setVolume(1.0);
+                            lebronMusicPlayer.setOnEndOfMedia(() -> SceneManager.resumeBgm());
+                            lebronMusicPlayer.play();
                         }
-                    } catch (Exception ignored) {}
+                    } catch (Exception ex) { ex.printStackTrace(); }
                     ult.play(() -> rootPane.getChildren().remove(ult));
                 }
             }
