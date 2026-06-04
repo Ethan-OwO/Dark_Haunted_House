@@ -66,7 +66,9 @@ jobs:
       - name: Zip app-image for release
         shell: pwsh
         run: |
-          Compress-Archive -Path "dist\逃離中央大學" -DestinationPath "dist\逃離中央大學-v1.0-windows.zip"
+          Get-ChildItem dist
+          $appDir = Get-ChildItem -Path dist -Directory | Select-Object -First 1
+          Compress-Archive -Path $appDir.FullName -DestinationPath "dist\EscapeNCU-windows.zip"
 
       - name: Upload to GitHub Releases
         uses: softprops/action-gh-release@v2
@@ -79,6 +81,6 @@ jobs:
             3. 雙擊資料夾內的 `逃離中央大學.exe` 即可遊玩（不需安裝 Java）
 
             如出現 Windows Defender 警告：點「更多資訊」→「仍要執行」
-          files: dist/*.zip
+          files: dist/EscapeNCU-windows.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
