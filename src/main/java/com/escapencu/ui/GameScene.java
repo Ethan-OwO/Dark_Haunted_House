@@ -12,7 +12,9 @@ import com.escapencu.entity.Entity;
 import com.escapencu.entity.FirePatch;
 import com.escapencu.entity.LeBronSkill;
 import com.escapencu.entity.Player;
+import com.escapencu.guanzhang.GuanZhangUltimate;
 import com.escapencu.lebron.LeBronUltimate;
+import javafx.scene.media.AudioClip;
 import com.escapencu.entity.boss.ChenQinHan;
 import com.escapencu.entity.boss.ShiGuoZhen;
 import com.escapencu.entity.boss.WuXiaoGuang;
@@ -53,6 +55,7 @@ public class GameScene {
     private LeBronSkill            lebronSkill    = null;
     private final List<FirePatch>  firePatches    = new ArrayList<>();
     private StackPane              rootPane       = null;
+    private boolean                guanZhangCutscenePlayed = false;
     /** Dev-only: a SHOP RewardRoom overlaid on top of the current room. */
     private RewardRoom             devRewardOverlay = null;
     // ── Pause variables ──────────────────────────────────────────────────────
@@ -193,6 +196,13 @@ public class GameScene {
                 if (rootPane != null) {
                     LeBronUltimate ult = new LeBronUltimate(GameApp.WIDTH, GameApp.HEIGHT);
                     rootPane.getChildren().add(ult);
+                    try {
+                        var url = getClass().getResource("/music/Video Project.mp3");
+                        if (url != null) {
+                            AudioClip clip = new AudioClip(url.toExternalForm().replace(" ", "%20"));
+                            clip.play();
+                        }
+                    } catch (Exception ignored) {}
                     ult.play(() -> rootPane.getChildren().remove(ult));
                 }
             }
@@ -332,6 +342,7 @@ public class GameScene {
         firePatches.clear();
         lebronSkill    = null;
         devRewardOverlay = null;
+        guanZhangCutscenePlayed = false;
     }
 
     // ── Camera helper ──────────────────────────────────────────────────────
@@ -415,6 +426,27 @@ public class GameScene {
         // Move player
         player.handleMovement(pressedKeys, deltaTime, buildAreaChecker());
         player.update(deltaTime);
+
+        // 館長山羌：倒數無敵計時器 + 觸發過場
+        if (GameState.guanZhangInvincibleTimer > 0) {
+            GameState.guanZhangInvincibleTimer -= deltaTime;
+            if (GameState.guanZhangInvincibleTimer < 0) GameState.guanZhangInvincibleTimer = 0;
+            player.tickShields(deltaTime);
+
+            if (!guanZhangCutscenePlayed && rootPane != null) {
+                guanZhangCutscenePlayed = true;
+                GuanZhangUltimate ult = new GuanZhangUltimate(GameApp.WIDTH, GameApp.HEIGHT);
+                rootPane.getChildren().add(ult);
+                try {
+                    var url = getClass().getResource("/music/gzshout.mp3");
+                    if (url != null) {
+                        AudioClip clip = new AudioClip(url.toExternalForm());
+                        clip.play();
+                    }
+                } catch (Exception ignored) {}
+                ult.play(() -> rootPane.getChildren().remove(ult));
+            }
+        }
 
         // LeBron 技能動畫
         if (lebronSkill != null) {
@@ -960,6 +992,20 @@ public class GameScene {
             gc.setFont(PIXEL_FONT_14 != null ? PIXEL_FONT_14 : Font.font(14));
             gc.setFill(used ? Color.GRAY : Color.web("#FDB927"));
             gc.fillText(used ? "LeBron [Q] ——" : "LeBron [Q] 就緒", 10, GameApp.HEIGHT - 15);
+        }
+        if (GameState.selectedTalent == GameState.Talent.GUAN_ZHANG) {
+            gc.setFont(PIXEL_FONT_14 != null ? PIXEL_FONT_14 : Font.font(14));
+            if (GameState.guanZhangInvincibleTimer > 0) {
+                gc.setFill(Color.web("#FFD700"));
+                gc.fillText(String.format("館長山羌 無敵中 %.1fs", GameState.guanZhangInvincibleTimer),
+                        10, GameApp.HEIGHT - 15);
+            } else if (GameState.guanZhangUsed) {
+                gc.setFill(Color.GRAY);
+                gc.fillText("館長山羌 [被動] ——", 10, GameApp.HEIGHT - 15);
+            } else {
+                gc.setFill(Color.web("#FFD700"));
+                gc.fillText("館長山羌 [被動] 待機", 10, GameApp.HEIGHT - 15);
+            }
         }
         // ▼▼▼▼▼ 新增：右下角衝刺體力條 ▼▼▼▼▼
         double dashCd = player.getDashCooldownTimer();

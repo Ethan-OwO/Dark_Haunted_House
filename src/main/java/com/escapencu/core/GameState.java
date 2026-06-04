@@ -25,11 +25,16 @@ public class GameState {
     public static double speedMultiplier  = 1.0;
 
     public enum Talent {
-        NONE, LEBRON
+        NONE, LEBRON, GUAN_ZHANG
     }
 
     public static Talent selectedTalent = Talent.NONE;
     public static boolean talentUsedThisStage = false;
+
+    /** 館長被動：死亡時觸發無敵，倒數秒數 > 0 代表無敵中 */
+    public static double guanZhangInvincibleTimer = 0;
+    /** 館長被動是否已在此局使用過（每局限一次） */
+    public static boolean guanZhangUsed = false;
 
     // ── Book enhancement system ────────────────────────────────────────────
     /**
@@ -59,5 +64,7 @@ public class GameState {
         speedMultiplier  = 1.0;
         bookEffects.clear();
         talentUsedThisStage = false;
+        guanZhangInvincibleTimer = 0;
+        guanZhangUsed = false;
     }
 }
