@@ -1,9 +1,12 @@
 package com.escapencu.entity.boss;
 
+import com.escapencu.entity.Bullet;
 import com.escapencu.entity.Entity;
 import com.escapencu.entity.Player;
 import com.escapencu.level.Room;
+import com.escapencu.util.ResourceLoader;
 import javafx.scene.canvas.GraphicsContext;
+import javafx.scene.image.Image;
 import javafx.scene.paint.Color;
 
 import java.util.ArrayList;
@@ -13,61 +16,134 @@ import java.util.Random;
 
 /**
  * Stage 1 Boss — 無小光
- * Passive: periodically turns invisible and spawns Decoys.
- * Active:  places Hanoi-Tower floor mines.
+ *
+ * Passive: periodically turns fully invisible and splits into 5 Decoys.
+ *          Only reappears once all 5 Decoys are destroyed (15-second safety timeout).
+ *          While invisible: does NOT move, shoot, or place mines.
+ * Active:  fires 3-way spread bullets; places Hanoi-Tower floor mines.
  */
 public class WuXiaoGuang extends Boss {
 
-    private final int     stage;
-    private final Random  rng = new Random();
+    // ── Sprites ────────────────────────────────────────────────────────────
+    private static final String BASE = "/images/boss/wxg/wxg/";
+    static final Image IMG_S = ResourceLoader.getImage(BASE + "wuxiaoguang_idle_s.png", false);
+    static final Image IMG_N = ResourceLoader.getImage(BASE + "wuxiaoguang_idle_n.png", false);
+    static final Image IMG_E = ResourceLoader.getImage(BASE + "wuxiaoguang_idle_e.png", false);
+    static final Image IMG_W = ResourceLoader.getImage(BASE + "wuxiaoguang_idle_w.png", false);
+    static final Image IMG_BULLET =
+            ResourceLoader.getImage("/images/boss/wxg/bullet/wxg_bullet.png", false);
 
-    // Invisibility cycle
-    private double  invisCD    = 5.0;  // time until next invis phase
-    private double  invisTimer = 0;    // remaining invis duration
+    // ── Facing direction ───────────────────────────────────────────────────
+    private enum Dir { S, N, E, W }
+    private Dir facing = Dir.S;
+
+    private final int    stage;
+    private final Random rng = new Random();
+
+    // ── Invisibility / decoy phase ─────────────────────────────────────────
+    private double  invisCD    = 5.0;   // time until next invis trigger
+    private double  invisTimer = 0;     // safety timeout (15 s)
     private boolean invisible  = false;
+    private final List<Decoy> activeDecoys = new ArrayList<>();
 
-    // Mine placement
-    private double  mineTimer  = 6.0;
-    private int     mineCount  = 0;
+    // ── Mine placement ─────────────────────────────────────────────────────
+    private double mineTimer = 6.0;
+    private int    mineCount = 0;
     private static final int MAX_MINES = 5;
 
-    // Entities to inject into the room next tick
     private final List<Entity> pendingRoom = new ArrayList<>();
 
     public WuXiaoGuang(double cx, double cy, int stage) {
-        super(cx - 28, cy - 28, 56, 56, 250 * stage, 55, 15 * stage);
+        super(cx - 40, cy - 40, 80, 80, 250 * stage, 55, 15 * stage);
         this.stage    = stage;
         bulletDamage  = 8 * stage;
         shootCooldown = 2.2;
     }
 
+    // ── Fires 3-way spread, each bullet rotated to face its travel direction ──
+    @Override
+    public void shootAt(double tx, double ty, double bulletSpeed) {
+        if (shootTimer > 0) return;
+        double dx   = tx - getCenterX();
+        double dy   = ty - getCenterY();
+        double dist = Math.hypot(dx, dy);
+        if (dist < 1) return;
+
+        double base  = Math.atan2(dy, dx);
+        double spread = Math.PI / 6; // 30°
+        double[] angles = { base, base - spread, base + spread };
+
+        for (double angle : angles) {
+            Bullet b = new Bullet(
+                    getCenterX(), getCenterY(),
+                    Math.cos(angle) * bulletSpeed,
+                    Math.sin(angle) * bulletSpeed,
+                    bulletDamage, false, 56);
+            if (IMG_BULLET != null) {
+                b.setImage(IMG_BULLET);
+                b.setRotateToVelocity(true);
+            }
+            bullets.add(b);
+        }
+        shootTimer = shootCooldown;
+    }
+
+    private void updateFacing(double dx, double dy) {
+        if (Math.abs(dx) > Math.abs(dy)) facing = dx > 0 ? Dir.E : Dir.W;
+        else                             facing = dy > 0 ? Dir.S : Dir.N;
+    }
+
     @Override
     protected void doAttack(Player player, double deltaTime) {
-        // ── Invisibility phase ─────────────────────────────────────────────
+
+        // ── Invisibility / decoy phase ─────────────────────────────────────
         if (invisible) {
             invisTimer -= deltaTime;
-            if (invisTimer <= 0) {
+            // Reveal when all decoys are dead OR safety timeout expires
+            boolean allDead = !activeDecoys.isEmpty()
+                    && activeDecoys.stream().noneMatch(Entity::isAlive);
+            if (allDead || invisTimer <= 0) {
                 invisible  = false;
                 invincible = false;
+                activeDecoys.clear();
             }
-        } else {
-            invisCD -= deltaTime;
-            if (invisCD <= 0) {
-                invisible  = true;
-                invincible = true;
-                invisTimer = 3.0;
-                invisCD    = 5.0 + rng.nextDouble() * 2;
-                // Spawn 2 Decoys at random room positions
-                for (int i = 0; i < 2; i++) {
-                    double dx = roomX + Room.WALL + 60 + rng.nextDouble() * (roomW - Room.WALL * 2 - 120);
-                    double dy = roomY + Room.WALL + 60 + rng.nextDouble() * (roomH - Room.WALL * 2 - 120);
-                    pendingRoom.add(new Decoy(dx, dy, stage));
-                }
-            }
-            // Normal movement + shooting only when visible
-            moveToward(player.getCenterX(), player.getCenterY(), deltaTime);
-            shootAt(player.getCenterX(), player.getCenterY(), 200 + stage * 20);
+            return; // no movement, no shooting, no mines while invisible
         }
+
+        // ── Trigger invisibility ───────────────────────────────────────────
+        invisCD -= deltaTime;
+        if (invisCD <= 0) {
+            invisible  = true;
+            invincible = true;
+            invisTimer = 15.0; // safety timeout
+            invisCD    = 5.0 + rng.nextDouble() * 2;
+
+            // Spawn 5 decoys spread around WuXiaoGuang's current centre
+            double cx     = getCenterX();
+            double cy     = getCenterY();
+            double spread = 70;
+            for (int i = 0; i < 5; i++) {
+                double angle  = i * (2 * Math.PI / 5);
+                double spawnX = cx + Math.cos(angle) * spread - 40;
+                double spawnY = cy + Math.sin(angle) * spread - 40;
+                // Clamp inside room inner bounds
+                spawnX = Math.max(roomX + Room.WALL + 10,
+                         Math.min(roomX + roomW - Room.WALL - 90, spawnX));
+                spawnY = Math.max(roomY + Room.WALL + 10,
+                         Math.min(roomY + roomH - Room.WALL - 90, spawnY));
+                Decoy d = new Decoy(spawnX, spawnY, stage);
+                pendingRoom.add(d);
+                activeDecoys.add(d);
+            }
+            return; // skip movement/attack this tick
+        }
+
+        // ── Normal movement + shooting (visible phase) ─────────────────────
+        double dx = player.getCenterX() - getCenterX();
+        double dy = player.getCenterY() - getCenterY();
+        updateFacing(dx, dy);
+        moveToward(player.getCenterX(), player.getCenterY(), deltaTime);
+        shootAt(player.getCenterX(), player.getCenterY(), 200 + stage * 20);
 
         // ── Mine placement ─────────────────────────────────────────────────
         mineTimer -= deltaTime;
@@ -80,7 +156,6 @@ public class WuXiaoGuang extends Boss {
         }
     }
 
-    /** Drain pattern: returns entities to spawn and clears the queue. */
     @Override
     public List<Entity> getPendingSpawns() {
         if (pendingRoom.isEmpty()) return Collections.emptyList();
@@ -93,19 +168,38 @@ public class WuXiaoGuang extends Boss {
     protected void updatePhase() {
         if (phase == 1 && hp <= maxHp / 2) {
             phase     = 2;
-            invisCD   = Math.min(invisCD, 2.0);   // invis more frequently in phase 2
+            invisCD   = Math.min(invisCD, 2.0);
             mineTimer = Math.min(mineTimer, 3.0);
         }
     }
 
     @Override
     public void draw(GraphicsContext gc) {
-        if (invisible) gc.setGlobalAlpha(0.25);
+        // Fully invisible — skip drawing body entirely
+        if (invisible) {
+            for (var b : bullets) b.draw(gc); // existing bullets still fly
+            return;
+        }
 
-        gc.setFill(phase == 2 ? Color.rgb(140, 20, 160) : Color.rgb(100, 30, 120));
-        gc.fillRect(x, y, width, height);
-        gc.setFill(Color.WHITE);
-        gc.fillText("無小光", x + 6, y + height / 2 + 5);
+        Image img = switch (facing) {
+            case N -> IMG_N;
+            case E -> IMG_E;
+            case W -> IMG_W;
+            default -> IMG_S;
+        };
+
+        if (img != null) {
+            gc.drawImage(img, x, y, width, height);
+            if (phase == 2) {
+                gc.setFill(Color.color(0.55, 0.0, 0.65, 0.40));
+                gc.fillRect(x, y, width, height);
+            }
+        } else {
+            gc.setFill(phase == 2 ? Color.rgb(140, 20, 160) : Color.rgb(100, 30, 120));
+            gc.fillRect(x, y, width, height);
+            gc.setFill(Color.WHITE);
+            gc.fillText("無小光", x + 6, y + height / 2 + 5);
+        }
 
         if (hp < maxHp) {
             gc.setFill(Color.DARKRED);
@@ -113,8 +207,6 @@ public class WuXiaoGuang extends Boss {
             gc.setFill(Color.LIMEGREEN);
             gc.fillRect(x, y - 10, width * (double) hp / maxHp, 5);
         }
-
-        if (invisible) gc.setGlobalAlpha(1.0);
 
         for (var b : bullets) b.draw(gc);
     }
