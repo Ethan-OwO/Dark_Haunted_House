@@ -257,6 +257,11 @@ public class Player extends Entity {
         double  drawX   = getCenterX() - DRAW_SIZE / 2.0;
         double  drawY   = getCenterY() - DRAW_SIZE / 2.0 + bobOffset;
 
+        boolean facingNorth = (currentDir == Dir.N) && !dying;
+
+        // 朝北時槍畫在角色下方（先畫槍再畫人）
+        if (facingNorth && !dying && stunTimer <= 0) drawGun(gc);
+
         if (stunTimer > 0) gc.setGlobalAlpha(0.55);
 
         if (frame != null) {
@@ -276,26 +281,8 @@ public class Player extends Entity {
 
         gc.setGlobalAlpha(1.0);
 
-        if (!dying && stunTimer <= 0) { // 當玩家沒死且沒被暈眩時才畫槍
-            double angleRad = Math.atan2(mouseWorldY - getCenterY(), mouseWorldX - getCenterX());
-            double angleDeg = Math.toDegrees(angleRad);
-
-            gc.save(); // 保存畫筆設定
-            gc.translate(getCenterX(), getCenterY()); // 移動到角色中心點（旋轉軸心）
-            gc.rotate(angleDeg); // 旋轉畫筆
-
-            double gunWidth = 54;  // 設定槍枝在畫面上的寬度
-            double gunHeight = 27; // 設定槍枝在畫面上的高度
-
-            // 鏡像防止槍枝上下顛倒：如果滑鼠在角色左半邊，就把 Y 軸翻轉
-            if (mouseWorldX < getCenterX()) {
-                gc.scale(1, -1);
-            }
-
-            // 繪製槍枝：X 軸往右推 10 像素代表手拿的位置，Y 軸向上偏移一半高度使其對齊中心
-            gc.drawImage(IMG_GUN, 10, -gunHeight / 2, gunWidth, gunHeight);
-            gc.restore(); // 恢復畫筆設定
-        }
+        // 其他方向槍畫在角色上方（後畫槍）
+        if (!facingNorth && !dying && stunTimer <= 0) drawGun(gc);
 
         if (poisonTimer > 0) { gc.setFill(Color.LIMEGREEN); gc.fillText("毒", x,      y - 5); }
         if (burnTimer   > 0) { gc.setFill(Color.ORANGE);    gc.fillText("燃", x + 16, y - 5); }
@@ -311,6 +298,21 @@ public class Player extends Entity {
         if (GameState.guanZhangInvincibleTimer > 0) {
             drawGuanZhangShields(gc);
         }
+    }
+
+    private void drawGun(GraphicsContext gc) {
+        double angleRad = Math.atan2(mouseWorldY - getCenterY(), mouseWorldX - getCenterX());
+        double angleDeg = Math.toDegrees(angleRad);
+
+        double gunWidth  = 54;
+        double gunHeight = 27;
+
+        gc.save();
+        gc.translate(getCenterX(), getCenterY());
+        gc.rotate(angleDeg);
+        if (mouseWorldX < getCenterX()) gc.scale(1, -1);
+        gc.drawImage(IMG_GUN, 10, -gunHeight / 2, gunWidth, gunHeight);
+        gc.restore();
     }
 
     private double shieldAngle = 0;
