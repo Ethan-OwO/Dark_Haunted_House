@@ -55,7 +55,8 @@ public class Player extends Entity {
     private static final Image IMG_WALK2_E = ResourceLoader.getImage("/images/player/player_walk2_e.png", true);
     private static final Image IMG_DEATH1  = ResourceLoader.getImage("/images/player/death1.jpg",         true);
     private static final Image IMG_DEATH2  = ResourceLoader.getImage("/images/player/death2.jpg",         true);
-
+    private static final Image IMG_GUN    = ResourceLoader.getImage("/images/weapon/player_gun.png", true);
+    private static final Image IMG_BULLET = ResourceLoader.getImage("/images/bullet/player_bullet.png", true);
     // ── Animation state ────────────────────────────────────────────────────
     private boolean moving    = false;
     private double  bobTime   = 0;
@@ -209,12 +210,28 @@ public class Player extends Entity {
 
     public void shoot() {
         if (shootTimer > 0 || stunTimer > 0) return;
-        double angle = Math.atan2(mouseWorldY - getCenterY(), mouseWorldX - getCenterX());
+        // 1. 先計算出玩家中心點到滑鼠世界座標的夾角弧度
+        double pCx = getCenterX();
+        double pCy = getCenterY();
+        double angle = Math.atan2(mouseWorldY - pCy, mouseWorldX - pCx);
+
+        // 2. 定義槍管的長度（從玩家中心到槍口的像素距離）
+        // 數值 28.0 是預估值，如果測試時發現子彈離槍口太遠，可以調小（例如 24.0）
+        // 如果發現子彈卡在槍管中間，可以調大（例如 32.0）
+        double gunLength = 54;
+
+        // 3. 利用三角函數動態計算出槍口在遊戲世界中的實際 X, Y 座標
+        double muzzleX = pCx + Math.cos(angle) * gunLength;
+        double muzzleY = pCy + Math.sin(angle) * gunLength -13;
+
         int dmg = (int)(BULLET_DAMAGE * GameState.damageMultiplier);
-        bullets.add(new Bullet(getCenterX(), getCenterY(),
+
+        // 4. 將子彈的生成起點從原來的 (getCenterX(), getCenterY()) 改為槍口座標 (muzzleX, muzzleY)
+        bullets.add(new Bullet(muzzleX, muzzleY,
                 Math.cos(angle) * BULLET_SPEED,
                 Math.sin(angle) * BULLET_SPEED,
-                dmg, true));
+                dmg, true, IMG_BULLET));
+
         shootTimer = SHOOT_COOLDOWN;
     }
 
@@ -246,6 +263,27 @@ public class Player extends Entity {
         }
 
         gc.setGlobalAlpha(1.0);
+
+        if (!dying && stunTimer <= 0) { // 當玩家沒死且沒被暈眩時才畫槍
+            double angleRad = Math.atan2(mouseWorldY - getCenterY(), mouseWorldX - getCenterX());
+            double angleDeg = Math.toDegrees(angleRad);
+
+            gc.save(); // 保存畫筆設定
+            gc.translate(getCenterX(), getCenterY()); // 移動到角色中心點（旋轉軸心）
+            gc.rotate(angleDeg); // 旋轉畫筆
+
+            double gunWidth = 54;  // 設定槍枝在畫面上的寬度
+            double gunHeight = 27; // 設定槍枝在畫面上的高度
+
+            // 鏡像防止槍枝上下顛倒：如果滑鼠在角色左半邊，就把 Y 軸翻轉
+            if (mouseWorldX < getCenterX()) {
+                gc.scale(1, -1);
+            }
+
+            // 繪製槍枝：X 軸往右推 10 像素代表手拿的位置，Y 軸向上偏移一半高度使其對齊中心
+            gc.drawImage(IMG_GUN, 10, -gunHeight / 2, gunWidth, gunHeight);
+            gc.restore(); // 恢復畫筆設定
+        }
 
         if (poisonTimer > 0) { gc.setFill(Color.LIMEGREEN); gc.fillText("毒", x,      y - 5); }
         if (burnTimer   > 0) { gc.setFill(Color.ORANGE);    gc.fillText("燃", x + 16, y - 5); }
