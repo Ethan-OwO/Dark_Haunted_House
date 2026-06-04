@@ -56,6 +56,7 @@ public class GameScene {
     private final List<FirePatch>  firePatches    = new ArrayList<>();
     private StackPane              rootPane       = null;
     private boolean                guanZhangCutscenePlayed = false;
+    private AudioClip              activeSkillClip = null; // prevent GC from stopping mid-play
     /** Dev-only: a SHOP RewardRoom overlaid on top of the current room. */
     private RewardRoom             devRewardOverlay = null;
     // ── Pause variables ──────────────────────────────────────────────────────
@@ -440,10 +441,10 @@ public class GameScene {
                 try {
                     var url = getClass().getResource("/music/gzshout.mp3");
                     if (url != null) {
-                        AudioClip clip = new AudioClip(url.toExternalForm());
-                        clip.play();
+                        activeSkillClip = new AudioClip(url.toExternalForm());
+                        activeSkillClip.play();
                     }
-                } catch (Exception ignored) {}
+                } catch (Exception ex) { ex.printStackTrace(); }
                 ult.play(() -> rootPane.getChildren().remove(ult));
             }
         }
