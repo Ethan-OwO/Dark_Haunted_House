@@ -246,7 +246,7 @@ public class NormalRoom extends Room {
 
         drawObstacles(gc);
 
-        if (type == Type.EXIT)   drawPortal(gc);
+
         if (type == Type.REWARD) drawRewardLabel(gc);
     }
 
