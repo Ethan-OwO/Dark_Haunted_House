@@ -99,6 +99,22 @@ public class GameScene {
     private boolean prevRoomCleared     = false;  // cleared state last frame
     private Room    prevTrackedRoom     = null;   // detects room changes
 
+    // ── Boss intro animation ───────────────────────────────────────────────
+    private static final javafx.scene.image.Image BOSS_BANNER_IMG =
+            com.escapencu.util.ResourceLoader.getImage("/images/ui/boss_banner.png", false);
+    private static final javafx.scene.image.Image PORTRAIT_WXG =
+            com.escapencu.util.ResourceLoader.getImage("/images/boss/wxg/wxg/wuxiaoguang_idle_s.png", false);
+    private static final javafx.scene.image.Image PORTRAIT_CQH =
+            com.escapencu.util.ResourceLoader.getImage("/images/boss/chenqinhan/truthtable_idle_s.png", false);
+    private static final javafx.scene.image.Image PORTRAIT_SGZ =
+            com.escapencu.util.ResourceLoader.getImage("/images/boss/sgz/needle_idle_s.png", false);
+    private static final double INTRO_SLIDE = 0.4;
+    private static final double INTRO_HOLD  = 1.5;
+    private static final double INTRO_TOTAL = INTRO_SLIDE * 2 + INTRO_HOLD;
+    private boolean bossIntroActive = false;
+    private double  bossIntroTimer  = 0;
+    private int     bossIntroStage  = 1; // which boss portrait / name to show
+
     // ── HUD coin animation ─────────────────────────────────────────────────
     private static final javafx.scene.image.Image HUD_COIN_SHEET =
             com.escapencu.util.ResourceLoader.getImage("/images/2D Chests & Coins/Coin.png", false);
@@ -118,7 +134,7 @@ public class GameScene {
 
     // ── Tab-completion data (update when new commands / entities are added) ──
     /** All available slash-commands. */
-    private static final List<String> CMD_LIST = List.of("/help", "/summon", "/shop", "/closeshop", "/chest");
+    private static final List<String> CMD_LIST = List.of("/help", "/summon", "/shop", "/closeshop", "/chest", "/bossintro");
 
     /**
      * Summonable entity names — both English and Chinese so players can
@@ -416,6 +432,17 @@ public class GameScene {
 
         if (console.isOpen()) return; // 打指令時凍結遊戲
 
+        // Boss 入場動畫：凍結所有遊戲邏輯直到動畫結束
+        if (bossIntroActive) {
+            bossIntroTimer += deltaTime;
+            if (bossIntroTimer >= INTRO_TOTAL) {
+                bossIntroActive = false;
+                if (currentRoom != null && !currentRoom.isActivated())
+                    currentRoom.activate();
+            }
+            return;
+        }
+
         // Dev mode: N key → skip to next floor
         if (devAdvancePending) {
             devAdvancePending = false;
@@ -517,7 +544,16 @@ public class GameScene {
                         visitedRooms.add(currentRoom);
 
                         // 3. 門確實關好後，才觸發房間啟動（生成怪物）
-                        if (!detected.isActivated()) detected.activate();
+                        if (!detected.isActivated()) {
+                            if (detected.type == Room.Type.BOSS) {
+                                // Boss 房：先播入場動畫，動畫結束後才生成怪物
+                                bossIntroStage  = GameState.currentStage;
+                                bossIntroActive = true;
+                                bossIntroTimer  = 0;
+                            } else {
+                                detected.activate();
+                            }
+                        }
                     }
                 }
             }
@@ -623,7 +659,79 @@ public class GameScene {
 
         drawHUD();
         drawMiniMap();
+        if (bossIntroActive) drawBossIntro();
         console.draw(gc, GameApp.WIDTH, GameApp.HEIGHT);
+    }
+
+    // ── Boss intro animation ───────────────────────────────────────────────
+    private void drawBossIntro() {
+        double w = GameApp.WIDTH, h = GameApp.HEIGHT;
+
+        // ── Compute banner X position (slide in from left, hold, slide out right) ──
+        double bannerX;
+        if (bossIntroTimer < INTRO_SLIDE) {
+            // Ease-out slide in: starts fast, slows to rest at centre
+            double t = bossIntroTimer / INTRO_SLIDE;        // 0 → 1
+            double eased = 1 - (1 - t) * (1 - t);          // ease-out quadratic
+            bannerX = -w + w * eased;                        // -800 → 0
+        } else if (bossIntroTimer < INTRO_SLIDE + INTRO_HOLD) {
+            bannerX = 0;
+        } else {
+            // Ease-in slide out: starts slow, accelerates to the right
+            double t = (bossIntroTimer - INTRO_SLIDE - INTRO_HOLD) / INTRO_SLIDE; // 0 → 1
+            bannerX = w * t * t;                             // 0 → 800
+        }
+
+        gc.save();
+        gc.translate(bannerX, 0);
+
+        // ── Banner background ──────────────────────────────────────────────
+        if (BOSS_BANNER_IMG != null) {
+            gc.drawImage(BOSS_BANNER_IMG, 0, 0, w, h);
+        } else {
+            // Fallback: dark blue overlay
+            gc.setFill(javafx.scene.paint.Color.color(0.0, 0.02, 0.18, 0.93));
+            gc.fillRect(0, 0, w, h);
+            gc.setStroke(javafx.scene.paint.Color.color(0.1, 0.4, 1.0, 0.8));
+            gc.setLineWidth(4);
+            gc.strokeRect(8, 8, w - 16, h - 16);
+        }
+
+        // ── Boss data ──────────────────────────────────────────────────────
+        String stageLbl = "STAGE " + bossIntroStage + "  BOSS";
+        String bossName = switch (bossIntroStage) {
+            case 1  -> "無小光";
+            case 2  -> "沉沁汗";
+            default -> "濕幗針";
+        };
+        javafx.scene.image.Image portrait = switch (bossIntroStage) {
+            case 1  -> PORTRAIT_WXG;
+            case 2  -> PORTRAIT_CQH;
+            default -> PORTRAIT_SGZ;
+        };
+
+        gc.setTextAlign(javafx.scene.text.TextAlignment.CENTER);
+        Font prevFont = gc.getFont();
+
+        // Stage sub-label
+        gc.setFont(PIXEL_FONT_HUD != null ? PIXEL_FONT_HUD : prevFont);
+        gc.setFill(javafx.scene.paint.Color.color(0.5, 0.75, 1.0, 0.9));
+        gc.fillText(stageLbl, w / 2.0, h / 2.0 - 130);
+
+        // Boss portrait (centred, above the name)
+        double pSz = 200;
+        if (portrait != null) {
+            gc.drawImage(portrait, w / 2.0 - pSz / 2, h / 2.0 - 120, pSz, pSz);
+        }
+
+        // Boss name (large, below portrait)
+        gc.setFont(PIXEL_FONT_LARGE != null ? PIXEL_FONT_LARGE : prevFont);
+        gc.setFill(javafx.scene.paint.Color.WHITE);
+        gc.fillText(bossName, w / 2.0, h / 2.0 + 110);
+
+        gc.setFont(prevFont);
+        gc.setTextAlign(javafx.scene.text.TextAlignment.LEFT);
+        gc.restore();
     }
 
     // ── Reward room interaction ────────────────────────────────────────────
@@ -719,9 +827,30 @@ public class GameScene {
             case "summon"    -> execSummon(parts);
             case "shop"      -> execShop();
             case "chest"     -> execChest();
-            case "closeshop" -> execCloseReward();
-            default          -> console.showOutput("❌ 未知指令：/" + parts[0] + "\n輸入 /help 查看所有指令");
+            case "closeshop"  -> execCloseReward();
+            case "bossintro"  -> execBossIntro(parts);
+            default           -> console.showOutput("❌ 未知指令：/" + parts[0] + "\n輸入 /help 查看所有指令");
         }
+    }
+
+    private void execBossIntro(String[] parts) {
+        int stage = GameState.currentStage; // default: current stage
+        if (parts.length >= 2) {
+            stage = switch (parts[1].toLowerCase()) {
+                case "wxg", "1", "無小光"           -> 1;
+                case "cqh", "2", "沉沁汗", "truthtable" -> 2;
+                case "sgz", "3", "濕幗針"           -> 3;
+                default -> {
+                    console.showOutput("用法：/bossintro [wxg|cqh|sgz]");
+                    yield -1;
+                }
+            };
+        }
+        if (stage < 1) return;
+        bossIntroStage  = stage;
+        bossIntroActive = true;
+        bossIntroTimer  = 0;
+        console.close();
     }
 
     private void execHelp() {
@@ -734,7 +863,8 @@ public class GameScene {
                           shiguozhen 濕幗針
                 /shop              在當前房間疊加商店（按 1/2/3 購買）
                 /chest             在當前房間疊加寶箱（按 E 開啟）
-                /closeshop         關閉疊加商店 / 寶箱""", 7.5);
+                /closeshop         關閉疊加商店 / 寶箱
+                /bossintro [wxg|cqh|sgz]  預覽 Boss 入場動畫""", 7.5);
     }
 
     private void execSummon(String[] parts) {
