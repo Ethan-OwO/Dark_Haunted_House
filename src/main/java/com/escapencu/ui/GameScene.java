@@ -545,9 +545,11 @@ public class GameScene {
 
         if (contactCooldown > 0) contactCooldown -= deltaTime;
         if (shakeTimer      > 0) shakeTimer      -= deltaTime;
+        int hpBefore = player.getHp();
         resolveCollisions();
         if (GameState.opMode) player.fullHeal();
         GameState.playerHp = player.getHp();
+        if (player.getHp() < hpBefore) triggerShake(0.35, 9.0);
 
         if (!player.isAlive()) {
             gameLoop.stop();

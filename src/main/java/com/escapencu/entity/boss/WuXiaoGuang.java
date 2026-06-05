@@ -6,6 +6,7 @@ import com.escapencu.entity.Player;
 import com.escapencu.level.Room;
 import com.escapencu.util.ResourceLoader;
 import javafx.scene.canvas.GraphicsContext;
+import javafx.scene.effect.ColorAdjust;
 import javafx.scene.image.Image;
 import javafx.scene.paint.Color;
 
@@ -69,15 +70,16 @@ public class WuXiaoGuang extends Boss {
         double dist = Math.hypot(dx, dy);
         if (dist < 1) return;
 
-        double base  = Math.atan2(dy, dx);
+        double base   = Math.atan2(dy, dx);
         double spread = Math.PI / 6; // 30°
         double[] angles = { base, base - spread, base + spread };
+        double spd = bulletSpeed * (phase == 2 ? 1.35 : 1.0); // Phase 2 faster
 
         for (double angle : angles) {
             Bullet b = new Bullet(
                     getCenterX(), getCenterY(),
-                    Math.cos(angle) * bulletSpeed,
-                    Math.sin(angle) * bulletSpeed,
+                    Math.cos(angle) * spd,
+                    Math.sin(angle) * spd,
                     bulletDamage, false, 56);
             if (IMG_BULLET != null) {
                 b.setImage(IMG_BULLET);
@@ -86,6 +88,19 @@ public class WuXiaoGuang extends Boss {
             bullets.add(b);
         }
         shootTimer = shootCooldown;
+    }
+
+    /** Fires {@code count} bullets evenly spread in all directions (reappear burst). */
+    private void fireBurst(int count) {
+        double spd = (220 + stage * 20) * (phase == 2 ? 1.35 : 1.0);
+        for (int i = 0; i < count; i++) {
+            double angle = i * (2 * Math.PI / count);
+            Bullet b = new Bullet(getCenterX(), getCenterY(),
+                    Math.cos(angle) * spd, Math.sin(angle) * spd,
+                    bulletDamage, false, 56);
+            if (IMG_BULLET != null) { b.setImage(IMG_BULLET); b.setRotateToVelocity(true); }
+            bullets.add(b);
+        }
     }
 
     private void updateFacing(double dx, double dy) {
@@ -106,6 +121,8 @@ public class WuXiaoGuang extends Boss {
                 invisible  = false;
                 invincible = false;
                 activeDecoys.clear();
+                if (phase == 2) fireBurst(12); // Phase 2: radial burst on reappear
+                else            fireBurst(8);
             }
             return; // no movement, no shooting, no mines while invisible
         }
@@ -167,9 +184,10 @@ public class WuXiaoGuang extends Boss {
     @Override
     protected void updatePhase() {
         if (phase == 1 && hp <= maxHp / 2) {
-            phase     = 2;
-            invisCD   = Math.min(invisCD, 2.0);
-            mineTimer = Math.min(mineTimer, 3.0);
+            phase         = 2;
+            invisCD       = Math.min(invisCD, 2.0);
+            mineTimer     = Math.min(mineTimer, 3.0);
+            shootCooldown = 1.5; // Phase 2: shoot more frequently
         }
     }
 
@@ -189,11 +207,15 @@ public class WuXiaoGuang extends Boss {
         };
 
         if (img != null) {
-            gc.drawImage(img, x, y, width, height);
             if (phase == 2) {
-                gc.setFill(Color.color(0.55, 0.0, 0.65, 0.40));
-                gc.fillRect(x, y, width, height);
+                ColorAdjust p2 = new ColorAdjust();
+                p2.setHue(0.1);
+                p2.setBrightness(-0.2);
+                p2.setSaturation(0.5);
+                gc.setEffect(p2);
             }
+            gc.drawImage(img, x, y, width, height);
+            gc.setEffect(null);
         } else {
             gc.setFill(phase == 2 ? Color.rgb(140, 20, 160) : Color.rgb(100, 30, 120));
             gc.fillRect(x, y, width, height);
