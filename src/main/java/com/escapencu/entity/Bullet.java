@@ -75,6 +75,7 @@ public class Bullet extends Entity {
     }
 
     public void setImage(Image img)                 { this.image = img; }
+    public boolean hasImage()                       { return image != null; }
     public void setRotateToVelocity(boolean rotate) { this.rotateToVelocity = rotate; }
     public void hit()                               { alive = false; }
     public int  getDamage()                         { return damage; }

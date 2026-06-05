@@ -22,12 +22,28 @@ public class EffectBullet extends Bullet {
         this.label = label;
     }
 
+    /** Constructor with custom hitbox size (for image-based logic-gate bullets). */
+    public EffectBullet(double cx, double cy, double vx, double vy,
+                        int damage, Color color, String label,
+                        Consumer<Player> onHit, double size) {
+        super(cx, cy, vx, vy, damage, false, size);
+        this.onHit = onHit;
+        this.color = color;
+        this.label = label;
+    }
+
     public void applyEffect(Player p) {
         if (onHit != null) onHit.accept(p);
     }
 
     @Override
     public void draw(GraphicsContext gc) {
+        // If a custom image was set, delegate to Bullet's image+rotation logic
+        if (hasImage()) {
+            super.draw(gc);
+            return;
+        }
+        // Fallback: colour oval + label
         gc.setFill(color);
         gc.fillOval(x, y, width, height);
         if (label != null && !label.isEmpty()) {
